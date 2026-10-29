@@ -1,0 +1,60 @@
+# DuesPilot — Statutory Parameters Configuration
+# Per docs/architecture.md section 10.5 and Rule R-10:
+# - All statutory values are configuration, not hard-coded in logic.
+# - Each parameter specifies source, last_checked, and legal_review: PENDING.
+# - MSME Development (Amendment) Bill 2026 provisions are recorded with in_force: false.
+
+statutory:
+  payment_period:
+    agreed_cap_days:
+      value: 45
+      unit: "days"
+      description: "Maximum agreed payment period allowed under Section 15 of MSMED Act 2006"
+      source: "Micro, Small and Medium Enterprises Development Act, 2006 (Section 15)"
+      last_checked: "2026-10-23"
+      legal_review: "PENDING"
+      in_force: true
+
+    default_period_days:
+      value: 15
+      unit: "days"
+      description: "Default payment period where no written agreement exists (day of acceptance/deemed acceptance)"
+      source: "Micro, Small and Medium Enterprises Development Act, 2006 (Section 15)"
+      last_checked: "2026-10-23"
+      legal_review: "PENDING"
+      in_force: true
+
+    tax_deduction_disallowance:
+      description: "Delayed payment disallowance moved to Section 37(2)(g) of Income-tax Act, 2025"
+      source: "Finance Act / Income-tax Act, 2025 (Section 37(2)(g))"
+      effective_from: "2026-04-01"
+      last_checked: "2026-10-23"
+      legal_review: "PENDING"
+      in_force: true
+
+  interest:
+    rate_multiplier:
+      value: 3
+      unit: "multiplier"
+      description: "Compound interest at three times the bank rate notified by Reserve Bank of India"
+      source: "Micro, Small and Medium Enterprises Development Act, 2006 (Section 16)"
+      last_checked: "2026-10-23"
+      legal_review: "PENDING"
+      in_force: true
+
+    compounding_rest:
+      value: "MONTHLY"
+      description: "Interest compounded with monthly rests"
+      source: "Micro, Small and Medium Enterprises Development Act, 2006 (Section 16)"
+      last_checked: "2026-10-23"
+      legal_review: "PENDING"
+      in_force: true
+
+  amendment_bill_2026:
+    name: "Micro, Small and Medium Enterprises Development (Amendment) Bill, 2026"
+    status: "Passed Rajya Sabha 2026-08-03 and Lok Sabha 2026-08-07; awaiting assent/notification"
+    in_force: false
+    source: "Parliamentary Gazette / PRS Legislative Research"
+    last_checked: "2026-10-23"
+    legal_review: "PENDING"
+    notes: "Provisions not assumed in force until notified by Central Government in the Official Gazette."
