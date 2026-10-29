@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# scripts/check-env wrapper
+set -euo pipefail
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+node "${DIR}/check-env.js" "$@"
