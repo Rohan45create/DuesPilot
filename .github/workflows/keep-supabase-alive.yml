@@ -1,0 +1,44 @@
+name: Keep Supabase Alive
+
+on:
+  schedule:
+    - cron: '0 0 */3 * *' # Ping every 3 days at 00:00 UTC
+  workflow_dispatch:      # Enable manual trigger from GitHub Actions tab
+
+permissions:
+  contents: read
+
+concurrency:
+  group: keep-supabase-alive
+  cancel-in-progress: true
+
+jobs:
+  ping-supabase:
+    name: Ping Supabase Keep-Alive Table
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate Supabase secrets
+        run: |
+          if [ -z "${{ secrets.SUPABASE_URL }}" ] || [ -z "${{ secrets.SUPABASE_ANON_KEY }}" ]; then
+            echo "::error::CRITICAL: Missing SUPABASE_URL or SUPABASE_ANON_KEY secret in GitHub repository settings!"
+            echo "Supabase requires SUPABASE_URL and SUPABASE_ANON_KEY secrets to query the keep_alive table and prevent database pausing."
+            exit 1
+          fi
+
+      - name: Query keep_alive table via PostgREST
+        run: |
+          URL="${{ secrets.SUPABASE_URL }}/rest/v1/keep_alive?select=*"
+          echo "Pinging Supabase keep_alive table at $URL..."
+          RESPONSE=$(curl -f -s \
+            -X GET "$URL" \
+            -H "apikey: ${{ secrets.SUPABASE_ANON_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}" \
+            -H "Content-Type: application/json")
+          
+          echo "Response received: $RESPONSE"
+          if echo "$RESPONSE" | grep -q '"id"'; then
+            echo "Successfully verified Supabase PostgreSQL keep_alive table reachability."
+          else
+            echo "::error::Failed to reach Supabase keep_alive table. Response: $RESPONSE"
+            exit 1
+          fi
