@@ -1,0 +1,82 @@
+# ==============================================================================
+# Environment & Secrets (Never commit .env files)
+# ==============================================================================
+.env
+.env.*
+!.env.example
+deploy/.env
+deploy/.env.*
+frontend/.env
+frontend/.env.*
+
+# ==============================================================================
+# Java & Maven Build Output
+# ==============================================================================
+target/
+**/target/
+*.class
+*.jar
+*.war
+*.nar
+*.ear
+*.zip
+*.tar.gz
+*.rar
+hs_err_pid*
+replay_pid*
+
+# ==============================================================================
+# Node & Frontend Build Output
+# ==============================================================================
+node_modules/
+**/node_modules/
+dist/
+**/dist/
+.vite/
+**/vite/
+*.tsbuildinfo
+frontend/*.tsbuildinfo
+test-results/
+**/test-results/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ==============================================================================
+# IDE & Editor Metadata
+# ==============================================================================
+.idea/
+*.iml
+*.iws
+*.ipr
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ==============================================================================
+# Scratch, Logs & Local Exports
+# ==============================================================================
+project_structure.text
+*.log
+logs/
+exports/
+design/
+
+# ==============================================================================
+# Database / Local Storage
+# ==============================================================================
+postgres_data/
+
+# ==============================================================================
+# Benchmark Data & PDFs / Documents (Stored in PostgreSQL DB; never on disk/git)
+# ==============================================================================
+benchmark-data/
+benchmark-export/
+*.pdf
+*.docx
+*.xlsx
+*.doc
