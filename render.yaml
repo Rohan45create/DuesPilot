@@ -1,0 +1,75 @@
+# ==============================================================================
+# DuesPilot — Render Blueprint Specification (Operational Fallback)
+#
+# IMPORTANT FREE TIER BEHAVIOR & LIMITATIONS:
+# 1. Spin-down after inactivity: Free web services automatically spin down after
+#    15 minutes of zero inbound HTTP traffic.
+# 2. Cold-start latency: The first inbound request to a spun-down instance will
+#    experience a 30 to 60-second wake delay before the JVM responds.
+# 3. Compute limits: 0.1 CPU core, 512 MB RAM (configured with -XX:MaxRAMPercentage=75.0).
+# 4. Monthly runtime quota: 750 free instance hours per calendar month across all
+#    free web services on the account. DO NOT ping this service via cron timers!
+# ==============================================================================
+
+services:
+  - type: web
+    name: duespilot-api
+    runtime: docker
+    dockerfilePath: ./deploy/Dockerfile.backend
+    plan: free
+    region: singapore # Choose the closest region to your Supabase project (e.g. singapore or frankfurt)
+    healthCheckPath: /api/v1/ping
+    autoDeploy: true
+
+    envVars:
+      - key: PORT
+        value: 10000
+
+      - key: SERVER_PORT
+        value: 10000
+
+      - key: DEMO_MODE
+        value: replay
+
+      - key: RATE_LIMIT_RPM
+        value: 60
+
+      - key: DAILY_COST_CAP_MICROS
+        value: 50000000
+
+      - key: PER_CASE_COST_CAP_MICROS
+        value: 2000000
+
+      - key: LLM_MAX_INFLIGHT
+        value: 4
+
+      # CORS Allowed Origins: Allow Vercel production, preview wildcards, and local development
+      - key: CORS_ALLOWED_ORIGINS
+        value: https://duespilot.vercel.app,https://*.vercel.app,http://localhost:5173
+
+      # ------------------------------------------------------------------------
+      # Secret Environment Variables (Configure manually in Render Dashboard)
+      # ------------------------------------------------------------------------
+      - key: SUPABASE_URL
+        sync: false
+
+      - key: SUPABASE_JWKS_URI
+        sync: false
+
+      - key: DATABASE_URL
+        sync: false
+
+      - key: DATABASE_URL_DIRECT
+        sync: false
+
+      - key: SPRING_DATASOURCE_USERNAME
+        sync: false
+
+      - key: SPRING_DATASOURCE_PASSWORD
+        sync: false
+
+      - key: NEBIUS_API_KEY
+        sync: false
+
+      - key: TAVILY_API_KEY
+        sync: false
