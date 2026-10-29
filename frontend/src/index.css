@@ -1,0 +1,432 @@
+@import "tailwindcss";
+
+@theme {
+  --font-heading: 'Manrope', sans-serif;
+  --font-sans: 'Inter', 'Noto Sans Devanagari', sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+  --color-brand: #76B900;
+  --color-brand-hover: #86CB00;
+  --color-brand-text-light: #3E6600;
+  --color-brand-surface-dark: #1A2605;
+  --color-brand-surface-light: #F0F8E2;
+
+  --color-background: var(--background);
+  --color-shell: var(--shell-bg);
+  --color-surface: var(--surface-bg);
+  --color-surface-hover: var(--surface-hover);
+  --color-surface-subtle: var(--surface-subtle);
+  --color-border: var(--border-color);
+  --color-border-subtle: var(--border-subtle);
+  --color-foreground: var(--foreground);
+  --color-foreground-muted: var(--foreground-muted);
+  --color-foreground-subtle: var(--foreground-subtle);
+
+  --color-status-amber: #E59500;
+  --color-status-amber-surface: var(--amber-surface);
+  --color-status-amber-text: var(--amber-text);
+  --color-status-green: #76B900;
+  --color-status-green-surface: var(--green-surface);
+  --color-status-green-text: var(--green-text);
+  --color-status-red: #E05252;
+  --color-status-gray: var(--gray-badge);
+}
+
+:root {
+  --background: #ECEEEC;
+  --shell-bg: #F5F7F5;
+  --surface-bg: #FFFFFF;
+  --surface-hover: #F8FAF8;
+  --surface-subtle: #EDF0ED;
+  --border-color: #E2E6E2;
+  --border-subtle: #ECEFEC;
+  --foreground: #101210;
+  --foreground-muted: #585F58;
+  --foreground-subtle: #828A82;
+
+  --green-surface: #EAF5D5;
+  --green-text: #3E6600;
+  --amber-surface: #FDF3E3;
+  --amber-text: #8E5400;
+  --gray-badge: #E3E6E3;
+  --focus-ring: #3E6600;
+}
+
+.dark {
+  --background: #0B0D0B;
+  --shell-bg: #111311;
+  --surface-bg: #161816;
+  --surface-hover: #1C1E1C;
+  --surface-subtle: #202320;
+  --border-color: #272B27;
+  --border-subtle: #1F221F;
+  --foreground: #F2F4F2;
+  --foreground-muted: #9AA29A;
+  --foreground-subtle: #676E67;
+
+  --green-surface: #1E280C;
+  --green-text: #96DF18;
+  --amber-surface: #2D2109;
+  --amber-text: #F3B344;
+  --gray-badge: #272B27;
+  --focus-ring: #76B900;
+}
+
+/* Base resets & typography */
+html, body {
+  margin: 0;
+  padding: 0;
+  font-family: var(--font-sans);
+  background-color: var(--background);
+  color: var(--foreground);
+  min-height: 100vh;
+  min-height: 100dvh;
+  width: 100%;
+  max-width: 100vw;
+  overflow-x: hidden;
+  /* Smooth theme transition */
+  transition: background-color 0.25s ease, color 0.25s ease, border-color 0.25s ease;
+}
+
+h1, h2, h3, h4, h5, h6, .font-heading {
+  font-family: var(--font-heading);
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Keyboard focus styling (2px green ring across all controls) */
+*:focus-visible {
+  outline: 2px solid var(--focus-ring) !important;
+  outline-offset: 2px !important;
+}
+
+/* Active press feedback on interactive elements */
+button:active:not(:disabled),
+a:active:not([aria-disabled="true"]),
+.btn-press:active {
+  transform: scale(0.98);
+  transition: transform 0.05s ease;
+}
+
+/* Clickable cards & rows: subtle green border on hover and keyboard focusable */
+.interactive-card {
+  cursor: pointer;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.15s ease;
+}
+.interactive-card:hover {
+  border-color: rgba(118, 185, 0, 0.5) !important;
+  box-shadow: 0 4px 16px -2px rgba(118, 185, 0, 0.1);
+}
+.interactive-card:active {
+  transform: scale(0.99);
+}
+
+.interactive-row {
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+.interactive-row:hover {
+  border-color: rgba(118, 185, 0, 0.45) !important;
+}
+.interactive-row:focus-visible {
+  outline: 2px solid var(--focus-ring) !important;
+  outline-offset: -1px !important;
+}
+
+/* Route transition animation */
+@keyframes route-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.route-fade-enter {
+  animation: route-fade-in 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Skeleton shimmer gradient */
+@keyframes shimmer-sweep {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.skeleton-shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--surface-subtle) 0%,
+    var(--border-color) 50%,
+    var(--surface-subtle) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer-sweep 2s ease-in-out infinite;
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--foreground-subtle);
+}
+
+/* ==========================================================================
+   Landing Page Keyframe Animations & Effects (Technical: No external animation libs)
+   ========================================================================== */
+
+/* Hero glowing frame */
+@keyframes glow-border {
+  0%, 100% {
+    box-shadow: 0 0 35px -10px rgba(118, 185, 0, 0.35), 0 0 15px -5px rgba(118, 185, 0, 0.2);
+  }
+  50% {
+    box-shadow: 0 0 55px -5px rgba(118, 185, 0, 0.5), 0 0 25px 0px rgba(118, 185, 0, 0.3);
+  }
+}
+
+.hero-glow-frame {
+  animation: glow-border 6s ease-in-out infinite;
+}
+
+/* Staggered Execution Record Animation (~12s loop, paused on hover) */
+@keyframes exec-step-1 {
+  0% { opacity: 0; transform: translateY(8px); }
+  3%, 92% { opacity: 1; transform: translateY(0); }
+  96%, 100% { opacity: 0; transform: translateY(-4px); }
+}
+
+@keyframes exec-step-2 {
+  0%, 5% { opacity: 0; transform: translateY(8px); }
+  9%, 92% { opacity: 1; transform: translateY(0); }
+  96%, 100% { opacity: 0; transform: translateY(-4px); }
+}
+
+@keyframes exec-step-3 {
+  0%, 11% { opacity: 0; transform: translateY(8px); }
+  15%, 92% { opacity: 1; transform: translateY(0); }
+  96%, 100% { opacity: 0; transform: translateY(-4px); }
+}
+
+@keyframes exec-step-4 {
+  0%, 17% { opacity: 0; transform: translateY(8px); }
+  21%, 92% { opacity: 1; transform: translateY(0); }
+  96%, 100% { opacity: 0; transform: translateY(-4px); }
+}
+
+@keyframes exec-balance {
+  0%, 22% { opacity: 0; transform: scale(0.96); }
+  26%, 92% { opacity: 1; transform: scale(1); }
+  96%, 100% { opacity: 0; transform: scale(0.96); }
+}
+
+.exec-anim-1 {
+  animation: exec-step-1 12s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+}
+.exec-anim-2 {
+  animation: exec-step-2 12s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+}
+.exec-anim-3 {
+  animation: exec-step-3 12s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+}
+.exec-anim-4 {
+  animation: exec-step-4 12s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+}
+.exec-anim-balance {
+  animation: exec-balance 12s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+}
+
+/* Pause execution record animation on card hover */
+.execution-card:hover .exec-anim-1,
+.execution-card:hover .exec-anim-2,
+.execution-card:hover .exec-anim-3,
+.execution-card:hover .exec-anim-4,
+.execution-card:hover .exec-anim-balance {
+  animation-play-state: paused;
+}
+
+/* Floating feature chips drifting slowly */
+@keyframes float-chip-1 {
+  0% { transform: translateY(0px) rotate(0deg); }
+  50% { transform: translateY(-10px) rotate(1.5deg); }
+  100% { transform: translateY(0px) rotate(0deg); }
+}
+
+@keyframes float-chip-2 {
+  0% { transform: translateY(0px) rotate(0deg); }
+  50% { transform: translateY(12px) rotate(-1.5deg); }
+  100% { transform: translateY(0px) rotate(0deg); }
+}
+
+@keyframes float-chip-3 {
+  0% { transform: translateY(0px) rotate(0deg); }
+  50% { transform: translateY(-8px) rotate(-1deg); }
+  100% { transform: translateY(0px) rotate(0deg); }
+}
+
+.chip-drift-1 {
+  animation: float-chip-1 7s ease-in-out infinite;
+}
+.chip-drift-2 {
+  animation: float-chip-2 8.5s ease-in-out infinite;
+}
+.chip-drift-3 {
+  animation: float-chip-3 6.5s ease-in-out infinite;
+}
+
+/* Pipeline SVG animated line drawing */
+@keyframes draw-path {
+  0% {
+    stroke-dashoffset: 400;
+  }
+  50%, 100% {
+    stroke-dashoffset: 0;
+  }
+}
+
+.svg-pipeline-line {
+  stroke-dasharray: 400;
+  stroke-dashoffset: 400;
+  animation: draw-path 4s ease-in-out infinite;
+}
+
+/* Sweeping green highlight on receipt */
+@keyframes sweep-highlight {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.sweep-highlight-effect {
+  background: linear-gradient(
+    90deg,
+    rgba(118, 185, 0, 0.08) 0%,
+    rgba(118, 185, 0, 0.45) 50%,
+    rgba(118, 185, 0, 0.08) 100%
+  );
+  background-size: 200% 100%;
+  animation: sweep-highlight 3.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+/* IntersectionObserver reveal utility classes */
+.reveal-init {
+  opacity: 0;
+  transform: translateY(28px);
+  transition: opacity 0.75s cubic-bezier(0.16, 1, 0.3, 1), transform 0.75s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.reveal-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Responsive & Mobile-friendly utilities */
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.metric-clamp {
+  font-size: clamp(1.25rem, 4.5vw, 1.875rem);
+  line-height: 1.15;
+}
+
+.metric-clamp-lg {
+  font-size: clamp(1.5rem, 6vw, 2.25rem);
+  line-height: 1.1;
+}
+
+.touch-target-44 {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+.edge-fade-mask {
+  mask-image: linear-gradient(to right, transparent, black 16px, black calc(100% - 16px), transparent);
+  -webkit-mask-image: linear-gradient(to right, transparent, black 16px, black calc(100% - 16px), transparent);
+}
+
+.safe-bottom-padding {
+  padding-bottom: max(1rem, env(safe-area-inset-bottom, 0px));
+}
+
+/* Accessibility: Strict Honouring of prefers-reduced-motion */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .hero-glow-frame,
+  .exec-anim-1,
+  .exec-anim-2,
+  .exec-anim-3,
+  .exec-anim-4,
+  .exec-anim-balance,
+  .chip-drift-1,
+  .chip-drift-2,
+  .chip-drift-3,
+  .svg-pipeline-line,
+  .sweep-highlight-effect,
+  .route-fade-enter,
+  .skeleton-shimmer {
+    animation: none !important;
+  }
+
+  button:active,
+  a:active,
+  .btn-press:active,
+  .interactive-card:active {
+    transform: none !important;
+  }
+
+  .exec-anim-1,
+  .exec-anim-2,
+  .exec-anim-3,
+  .exec-anim-4,
+  .exec-anim-balance {
+    opacity: 1 !important;
+    transform: none !important;
+  }
+
+  .svg-pipeline-line {
+    stroke-dashoffset: 0 !important;
+  }
+
+  .sweep-highlight-effect {
+    background: rgba(118, 185, 0, 0.25) !important;
+  }
+
+  .reveal-init {
+    opacity: 1 !important;
+    transform: none !important;
+    transition: none !important;
+  }
+}
