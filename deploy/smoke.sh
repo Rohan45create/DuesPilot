@@ -24,7 +24,7 @@ set -euo pipefail
 
 BACKEND_URL="${1:-http://localhost:8080}"
 FRONTEND_URL="${2:-http://localhost:5173}"
-SUPABASE_URL="${3:-${SUPABASE_URL:-https://gkaeiociqcjsbjfgdofi.supabase.co}}"
+SUPABASE_URL="${3:-${SUPABASE_URL:-https://YOUR-PROJECT-REF.supabase.co}}"
 SUPABASE_ANON_KEY="${4:-${SUPABASE_ANON_KEY:-}}"
 
 # Strip trailing slashes

@@ -1,5 +1,5 @@
-# ==============================================================================
-# DuesPilot — Render Blueprint Specification (Operational Fallback)
+﻿# ==============================================================================
+# DuesPilot â€” Render Blueprint Specification (Operational Fallback)
 #
 # IMPORTANT FREE TIER BEHAVIOR & LIMITATIONS:
 # 1. Spin-down after inactivity: Free web services automatically spin down after
@@ -15,7 +15,7 @@ services:
   - type: web
     name: duespilot-api
     runtime: docker
-    dockerfilePath: ./deploy/Dockerfile.backend
+    dockerfilePath: ./deploy/Dockerfile
     plan: free
     region: singapore # Choose the closest region to your Supabase project (e.g. singapore or frankfurt)
     healthCheckPath: /api/v1/ping
@@ -29,16 +29,19 @@ services:
         value: 10000
 
       - key: DEMO_MODE
-        value: replay
+        value: live
+
+      - key: NOTIFY_SANDBOX
+        value: "true"
 
       - key: RATE_LIMIT_RPM
         value: 60
 
       - key: DAILY_COST_CAP_MICROS
-        value: 50000000
+        value: 5000000
 
       - key: PER_CASE_COST_CAP_MICROS
-        value: 2000000
+        value: 250000
 
       - key: LLM_MAX_INFLIGHT
         value: 4

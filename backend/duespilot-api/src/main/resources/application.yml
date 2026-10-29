@@ -27,7 +27,7 @@ spring:
     default-schema: app
     schemas: app,public
     locations: classpath:db/migration
-    baseline-on-migrate: true
+    baseline-on-migrate: false
     baseline-version: 4
 
   lifecycle:
@@ -48,15 +48,15 @@ management:
         include: health,info
   endpoint:
     health:
-      show-details: always
+      show-details: never
       probes:
         enabled: true
 
 duespilot:
   demo-mode: ${DEMO_MODE:replay}
   auth:
-    supabase-url: ${SUPABASE_URL:https://gkaeiociqcjsbjfgdofi.supabase.co}
-    jwks-uri: ${SUPABASE_JWKS_URI:https://gkaeiociqcjsbjfgdofi.supabase.co/auth/v1/.well-known/jwks.json}
+    supabase-url: ${SUPABASE_URL:}
+    jwks-uri: ${SUPABASE_JWKS_URI:${duespilot.auth.supabase-url}/auth/v1/.well-known/jwks.json}
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://localhost:3000,http://localhost:8080}
   rate-limit:
@@ -73,8 +73,8 @@ duespilot:
     base-url: ${LLM_BASE_URL:https://api.tokenfactory.nebius.com/v1}
     api-key: ${NEBIUS_API_KEY:}
     max-inflight: ${LLM_MAX_INFLIGHT:10}
-    daily-cost-cap-micros: ${DAILY_COST_CAP_MICROS:50000000}       # $50.00
-    per-case-cost-cap-micros: ${PER_CASE_COST_CAP_MICROS:2000000}   # $2.00
+    daily-cost-cap-micros: ${DAILY_COST_CAP_MICROS:5000000}       # $5.00
+    per-case-cost-cap-micros: ${PER_CASE_COST_CAP_MICROS:250000}   # $0.25
     timeout-ms: ${LLM_TIMEOUT_MS:30000}
     max-retries: ${LLM_MAX_RETRIES:3}
     models:
@@ -100,7 +100,7 @@ duespilot:
         default-max-tokens: 4096
         expanded-max-tokens: 8192
   notifications:
-    sandbox: ${NOTIFY_SANDBOX:false}
+    sandbox: ${NOTIFY_SANDBOX:true}
     sandbox-email: ${NOTIFY_SANDBOX_EMAIL:owner@duespilot.local}
     sandbox-phone: ${NOTIFY_SANDBOX_PHONE:+919999999999}
     resend:

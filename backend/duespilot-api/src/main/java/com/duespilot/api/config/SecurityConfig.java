@@ -26,7 +26,10 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
+import jakarta.annotation.PostConstruct;
 import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.env.Environment;
 import java.util.Arrays;
 import java.util.List;
 
@@ -51,8 +54,23 @@ public class SecurityConfig {
 
     private static final Logger log = LoggerFactory.getLogger(SecurityConfig.class);
 
-    @Value("${duespilot.auth.supabase-url:${SUPABASE_URL:https://mock.supabase.co}}")
+    @Value("${duespilot.auth.supabase-url:}")
     private String supabaseUrl;
+
+    @Autowired
+    private Environment environment;
+
+    @PostConstruct
+    public void validateSupabaseConfiguration() {
+        boolean isTest = java.util.Arrays.asList(environment.getActiveProfiles()).contains("test");
+        if (!isTest) {
+            if (supabaseUrl == null || supabaseUrl.isBlank() || supabaseUrl.contains("YOUR-PROJECT-REF") || supabaseUrl.contains("mock.supabase.co")) {
+                throw new IllegalStateException(
+                    "CRITICAL STARTUP ERROR: SUPABASE_URL environment variable is required and must point to a valid Supabase project (e.g. https://<project-ref>.supabase.co)."
+                );
+            }
+        }
+    }
 
     @Value("${duespilot.auth.jwks-uri:}")
     private String customJwksUri;
@@ -74,7 +92,8 @@ public class SecurityConfig {
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
                 // Public endpoints: health probes, ping, webhooks, setup guide
-                .requestMatchers(HttpMethod.GET, "/api/v1/ping", "/actuator/**", "/api/v1/notifications/whatsapp/setup-guide").permitAll()
+                // F8 fix: expose only /actuator/health publicly; wildcard /actuator/** removed.
+                .requestMatchers(HttpMethod.GET, "/api/v1/ping", "/actuator/health", "/api/v1/notifications/whatsapp/setup-guide").permitAll()
                 .requestMatchers("/api/v1/webhooks/**").permitAll()
                 // Require authenticated token for all other API routes (including SSE streaming endpoints)
                 .requestMatchers("/api/v1/**").authenticated()

@@ -1,0 +1,21 @@
+# Test profile: provides a mock Supabase URL so the JWT decoder bean can be
+# constructed without a real SUPABASE_URL env var.  Tests that actually call
+# the JWT endpoint are annotated with the live-tests flag and are excluded in CI.
+duespilot:
+  auth:
+    supabase-url: https://mock.supabase.co
+    jwks-uri: https://mock.supabase.co/auth/v1/.well-known/jwks.json
+  notifications:
+    sandbox: true
+  llm:
+    daily-cost-cap-micros: 5000000
+    per-case-cost-cap-micros: 250000
+
+spring:
+  flyway:
+    enabled: false
+  datasource:
+    url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver

@@ -42,10 +42,11 @@ COPY --from=backend-builder --chown=duespilot:duespilot /app/backend/duespilot-a
 ENV PORT=8080 \
     SERVER_PORT=8080 \
     DEMO_MODE=replay \
+    NOTIFY_SANDBOX=true \
     RATE_LIMIT_RPM=60 \
     STORAGE_DIR=/app/data/uploads \
-    DAILY_COST_CAP_MICROS=50000000 \
-    PER_CASE_COST_CAP_MICROS=2000000 \
+    DAILY_COST_CAP_MICROS=5000000 \
+    PER_CASE_COST_CAP_MICROS=250000 \
     LLM_MAX_INFLIGHT=8
 
 EXPOSE 8080

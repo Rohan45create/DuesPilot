@@ -26,8 +26,16 @@ import {
 } from '../mocks/fixtures';
 import { supabase } from '../lib/supabase';
 
-// Switchable by env flag VITE_MOCK_API. Default to mock true if not explicitly set to 'false'
-const IS_MOCK_MODE = import.meta.env.VITE_MOCK_API !== 'false';
+// F1 fix: mock mode is opt-in only (VITE_MOCK_API === 'true') and forced OFF in
+// production builds (import.meta.env.PROD === true). Never active by default.
+export function isMockModeActive(isProd: boolean, mockApiEnv?: string): boolean {
+  return !isProd && mockApiEnv === 'true';
+}
+
+export const IS_MOCK_MODE = isMockModeActive(
+  Boolean(import.meta.env.PROD),
+  import.meta.env.VITE_MOCK_API
+);
 
 export class ApiError extends Error {
   constructor(
