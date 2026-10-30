@@ -130,9 +130,12 @@ public class NotificationService {
             throw new DemoReadOnlyException();
         }
 
-        // 2. Verify Case exists
+        // 2. Verify Case exists and belongs to current workspace
         CaseEntity caseEntity = caseRepository.findById(caseId)
             .orElseThrow(() -> new CaseNotFoundException(caseId));
+        if (caseEntity.workspaceId() != null && !caseEntity.workspaceId().equals(workspace.id()) && !caseEntity.isDemoData()) {
+            throw new CaseNotFoundException(caseId);
+        }
 
         // 3. Guardrail: Only APPROVED actions can be sent (Rule R-72)
         if (command.actionId() == null) {
@@ -240,7 +243,7 @@ public class NotificationService {
                         : sandboxPhone);
             }
             maskedBody = "[SANDBOX - Intended recipient: " + originalRecipient + "]\n\n" + maskedBody;
-            log.info("[SANDBOX ACTIVE] Rerouted notification from {} to {}", originalRecipient, dispatchRecipient);
+            log.info("[SANDBOX ACTIVE] Rerouted notification from {} to {}", maskRecipient(originalRecipient), maskRecipient(dispatchRecipient));
         }
 
         // 10. Check Sending Window 09:00–19:00 IST (Rule R-75)
@@ -600,7 +603,7 @@ public class NotificationService {
     }
 
     private void handleInboundWhatsAppMessage(String sender, String text, String msgId) {
-        log.info("Received inbound WhatsApp message from {}: {}", sender, text);
+        log.info("Received inbound WhatsApp message from {} (length: {} chars)", maskRecipient(sender), text != null ? text.length() : 0);
 
         // Honour STOP / unsubscribe (Rule R-74)
         if (text != null && (text.trim().equalsIgnoreCase("STOP") || text.trim().equalsIgnoreCase("UNSUBSCRIBE"))) {
@@ -617,7 +620,7 @@ public class NotificationService {
         // Inbound message creates a new MESSAGE document marked UNVERIFIED (Rule R-78)
         List<ContactEntity> contacts = contactRepository.findByWhatsappNumber(sender);
         if (contacts.isEmpty()) {
-            log.warn("Inbound WhatsApp message from unknown contact: {}", sender);
+            log.warn("Inbound WhatsApp message from unknown contact: {}", maskRecipient(sender));
             return;
         }
 
@@ -683,5 +686,16 @@ public class NotificationService {
         } catch (NoSuchAlgorithmException e) {
             throw new RuntimeException("SHA-256 not available", e);
         }
+    }
+    private static String maskRecipient(String recipient) {
+        if (recipient == null) return "null";
+        int at = recipient.indexOf('@');
+        if (at > 1) {
+            return recipient.substring(0, 2) + "***" + recipient.substring(at);
+        }
+        if (recipient.length() > 4) {
+            return recipient.substring(0, 2) + "***" + recipient.substring(recipient.length() - 2);
+        }
+        return "***";
     }
 }

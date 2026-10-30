@@ -62,9 +62,12 @@ public class CaseController {
             @PathVariable UUID caseId,
             @PathVariable UUID docId) {
         var downloaded = caseService.downloadDocument(caseId, docId);
+        org.springframework.http.ContentDisposition cd = org.springframework.http.ContentDisposition.inline()
+            .filename(downloaded.fileName(), java.nio.charset.StandardCharsets.UTF_8)
+            .build();
         return ResponseEntity.ok()
             .contentType(MediaType.parseMediaType(downloaded.mimeType()))
-            .header(org.springframework.http.HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + downloaded.fileName() + "\"")
+            .header(org.springframework.http.HttpHeaders.CONTENT_DISPOSITION, cd.toString())
             .header("X-Content-Type-Options", "nosniff")
             .body(downloaded.data());
     }

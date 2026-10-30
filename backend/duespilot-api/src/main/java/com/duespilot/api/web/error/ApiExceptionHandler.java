@@ -1,5 +1,7 @@
 package com.duespilot.api.web.error;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
@@ -16,6 +18,7 @@ import java.util.Map;
 @RestControllerAdvice
 public class ApiExceptionHandler {
 
+    private static final Logger log = LoggerFactory.getLogger(ApiExceptionHandler.class);
     private static final String ERROR_BASE_URL = "https://duespilot.com/errors/";
 
     @ExceptionHandler(ApiException.class)
@@ -87,9 +90,11 @@ public class ApiExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ProblemDetail> handleGenericException(Exception ex) {
+        log.error("Unhandled server exception caught by ApiExceptionHandler", ex);
+        // Phase 2 security hardening: do not leak raw exception messages or internal details
         ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(
             HttpStatus.INTERNAL_SERVER_ERROR,
-            ex.getMessage() != null ? ex.getMessage() : "An unexpected server error occurred."
+            "An unexpected server error occurred. Please try again later."
         );
         problemDetail.setTitle("Internal Server Error");
         problemDetail.setType(URI.create(ERROR_BASE_URL + "internal_server_error"));

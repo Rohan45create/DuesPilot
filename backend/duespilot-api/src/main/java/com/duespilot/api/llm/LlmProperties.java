@@ -11,8 +11,8 @@ public class LlmProperties {
     private String baseUrl = "https://api.tokenfactory.nebius.com/v1";
     private String apiKey = "";
     private int maxInflight = 10;
-    private long dailyCostCapMicros = 50_000_000L;
-    private long perCaseCostCapMicros = 2_000_000L;
+    private long dailyCostCapMicros = 5_000_000L;
+    private long perCaseCostCapMicros = 250_000L;
     private int timeoutMs = 30_000;
     private int maxRetries = 3;
     private Map<String, ModelConfig> models = new HashMap<>();
@@ -31,7 +31,16 @@ public class LlmProperties {
     }
 
     public void setBaseUrl(String baseUrl) {
+        validateSafeUrl(baseUrl);
         this.baseUrl = baseUrl;
+    }
+
+    public static void validateSafeUrl(String url) {
+        if (url == null || url.isBlank()) return;
+        String lower = url.toLowerCase(java.util.Locale.ROOT);
+        if (lower.contains("169.254.169.254") || lower.contains("metadata.google.internal") || lower.startsWith("file:") || lower.startsWith("ftp:")) {
+            throw new IllegalArgumentException("Invalid baseUrl: Cloud metadata or unsafe scheme is rejected to prevent SSRF.");
+        }
     }
 
     public String getApiKey() {

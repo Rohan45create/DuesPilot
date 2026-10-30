@@ -9,7 +9,7 @@ import org.springframework.mock.web.MockHttpServletResponse;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-@DisplayName("RateLimitingFilter Tests (Rule R-54, Section 16)")
+@DisplayName("RateLimitingFilter Hardened Tests (F6, Rule R-54)")
 class RateLimitingFilterTest {
 
     private DuesPilotProperties properties;
@@ -18,7 +18,7 @@ class RateLimitingFilterTest {
     @BeforeEach
     void setUp() {
         properties = new DuesPilotProperties();
-        properties.setDemoMode("live"); // live mode enforces rate limits
+        properties.setDemoMode("replay"); // F6: must enforce in ALL modes including replay
         properties.getRateLimit().setRequestsPerMinute(5);
         filter = new RateLimitingFilter(properties);
     }
@@ -38,7 +38,7 @@ class RateLimitingFilterTest {
     }
 
     @Test
-    @DisplayName("Requests exceeding limit return HTTP 429 with RATE_LIMITED ProblemDetail")
+    @DisplayName("Requests exceeding limit return HTTP 429 with RATE_LIMITED ProblemDetail in all modes")
     void testRequestExceedingLimitReturns429() throws Exception {
         // Send 5 permitted requests
         for (int i = 0; i < 5; i++) {
@@ -90,22 +90,15 @@ class RateLimitingFilterTest {
     }
 
     @Test
-    @DisplayName("X-Forwarded-For header is parsed to determine client IP")
-    void testXForwardedForHeaderResolution() throws Exception {
-        for (int i = 0; i < 5; i++) {
-            MockHttpServletRequest req = new MockHttpServletRequest("POST", "/api/v1/cases");
-            req.addHeader("X-Forwarded-For", "203.0.113.195, 70.41.3.18");
-            MockHttpServletResponse res = new MockHttpServletResponse();
-            filter.doFilter(req, res, new MockFilterChain());
-            assertThat(res.getStatus()).isEqualTo(200);
-        }
+    @DisplayName("F6: Derives client IP safely from resolved remote address, ignoring spoofed X-Forwarded-For headers")
+    void testSafeRemoteAddressDerivation() {
+        MockHttpServletRequest req = new MockHttpServletRequest();
+        req.setRemoteAddr("198.51.100.42");
+        // An attacker might try to spoof X-Forwarded-For:
+        req.addHeader("X-Forwarded-For", "1.2.3.4, 5.6.7.8");
 
-        MockHttpServletRequest blockedReq = new MockHttpServletRequest("POST", "/api/v1/cases");
-        blockedReq.addHeader("X-Forwarded-For", "203.0.113.195, 70.41.3.18");
-        MockHttpServletResponse blockedRes = new MockHttpServletResponse();
-        filter.doFilter(blockedReq, blockedRes, new MockFilterChain());
-
-        assertThat(blockedRes.getStatus()).isEqualTo(429);
+        String resolved = RateLimitingFilter.resolveClientIp(req);
+        assertThat(resolved).isEqualTo("198.51.100.42");
     }
 
     @Test
@@ -138,5 +131,23 @@ class RateLimitingFilterTest {
         } finally {
             org.springframework.security.core.context.SecurityContextHolder.clearContext();
         }
+    }
+
+    @Test
+    @DisplayName("F6: Eviction purges expired windows older than current minute")
+    void testEvictionOfExpiredWindows() {
+        long oldMinute = (System.currentTimeMillis() / 60000) - 2;
+        filter.getRequestCounts().put("ip:old.ip", new RateLimitingFilter.RateWindow(oldMinute, 10));
+
+        long currentMinute = System.currentTimeMillis() / 60000;
+        filter.getRequestCounts().put("ip:current.ip", new RateLimitingFilter.RateWindow(currentMinute, 2));
+
+        assertThat(filter.getRequestCounts()).containsKey("ip:old.ip");
+        assertThat(filter.getRequestCounts()).containsKey("ip:current.ip");
+
+        filter.evictExpiredWindows();
+
+        assertThat(filter.getRequestCounts()).doesNotContainKey("ip:old.ip");
+        assertThat(filter.getRequestCounts()).containsKey("ip:current.ip");
     }
 }

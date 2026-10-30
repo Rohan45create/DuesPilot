@@ -20,7 +20,16 @@ public class TavilyProperties {
     }
 
     public void setBaseUrl(String baseUrl) {
+        validateSafeUrl(baseUrl);
         this.baseUrl = baseUrl;
+    }
+
+    public static void validateSafeUrl(String url) {
+        if (url == null || url.isBlank()) return;
+        String lower = url.toLowerCase(java.util.Locale.ROOT);
+        if (lower.contains("169.254.169.254") || lower.contains("metadata.google.internal") || lower.startsWith("file:") || lower.startsWith("ftp:")) {
+            throw new IllegalArgumentException("Invalid baseUrl: Cloud metadata or unsafe scheme is rejected to prevent SSRF.");
+        }
     }
 
     public String getApiKey() {

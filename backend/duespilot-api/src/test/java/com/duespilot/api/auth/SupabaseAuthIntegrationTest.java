@@ -149,6 +149,22 @@ class SupabaseAuthIntegrationTest {
     }
 
     @Test
+    @DisplayName("F5: Access token query parameter is rejected (must use Authorization header)")
+    void testQueryParamAccessTokenIsRejected() throws Exception {
+        String token = generateJwt(
+            "user-query-param",
+            "queryparam@example.com",
+            false,
+            "authenticated",
+            Instant.now().plus(1, ChronoUnit.HOURS)
+        );
+
+        mockMvc.perform(get("/api/v1/cases?access_token=" + token))
+            .andExpect(status().isUnauthorized())
+            .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+    }
+
+    @Test
     @DisplayName("Token validation: Expired Bearer token is rejected with 401 UNAUTHORIZED")
     void testExpiredTokenIsRejected() throws Exception {
         String expiredToken = generateJwt(

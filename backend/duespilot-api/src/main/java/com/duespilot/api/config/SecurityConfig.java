@@ -84,6 +84,7 @@ public class SecurityConfig {
             CorsConfigurationSource corsConfigurationSource,
             BearerTokenResolver bearerTokenResolver,
             JwtDecoder jwtDecoder,
+            RateLimitingFilter rateLimitingFilter,
             DemoReadOnlyFilter demoReadOnlyFilter) throws Exception {
 
         http
@@ -117,7 +118,9 @@ public class SecurityConfig {
                         """);
                 })
             )
-            .addFilterAfter(demoReadOnlyFilter, BearerTokenAuthenticationFilter.class);
+            // F6 fix: RateLimitingFilter runs AFTER BearerTokenAuthenticationFilter so authenticated user identity is available
+            .addFilterAfter(rateLimitingFilter, BearerTokenAuthenticationFilter.class)
+            .addFilterAfter(demoReadOnlyFilter, RateLimitingFilter.class);
 
         return http.build();
     }
@@ -125,8 +128,9 @@ public class SecurityConfig {
     @Bean
     public BearerTokenResolver bearerTokenResolver() {
         DefaultBearerTokenResolver resolver = new DefaultBearerTokenResolver();
-        // Enables both header: "Authorization: Bearer <token>" and query param: "?access_token=<token>" (useful for SSE streams)
-        resolver.setAllowUriQueryParameter(true);
+        // F5 fix: Tokens must come ONLY from the Authorization header.
+        // Query parameter tokens (?access_token=) are explicitly disabled to prevent token leakage in URLs and logs.
+        resolver.setAllowUriQueryParameter(false);
         return resolver;
     }
 
@@ -178,5 +182,13 @@ public class SecurityConfig {
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", config);
         return source;
+    }
+
+    @Bean
+    public org.springframework.boot.web.servlet.FilterRegistrationBean<RateLimitingFilter> rateLimitingFilterRegistration(RateLimitingFilter filter) {
+        org.springframework.boot.web.servlet.FilterRegistrationBean<RateLimitingFilter> registration =
+            new org.springframework.boot.web.servlet.FilterRegistrationBean<>(filter);
+        registration.setEnabled(false); // Managed exclusively by Spring Security filter chain
+        return registration;
     }
 }

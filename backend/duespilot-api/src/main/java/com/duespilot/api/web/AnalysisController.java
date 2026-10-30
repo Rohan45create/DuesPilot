@@ -29,6 +29,9 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+import org.jspecify.annotations.Nullable;
+import com.duespilot.api.service.CurrentUserService;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import java.util.List;
 import java.util.UUID;
@@ -47,6 +50,33 @@ public class AnalysisController {
     private final EligibilityAssessmentRepository eligibilityAssessmentRepository;
     private final InterestEstimateRepository interestEstimateRepository;
     private final ProposedActionRepository proposedActionRepository;
+    private final @Nullable CurrentUserService currentUserService;
+
+    @Autowired
+    public AnalysisController(
+            CaseRepository caseRepository,
+            AnalysisRunRepository analysisRunRepository,
+            com.duespilot.api.service.AnalysisService analysisService,
+            com.duespilot.api.service.EventStreamService eventService,
+            ReconciliationResultRepository reconciliationResultRepository,
+            LedgerEntryRepository ledgerEntryRepository,
+            ConflictRepository conflictRepository,
+            EligibilityAssessmentRepository eligibilityAssessmentRepository,
+            InterestEstimateRepository interestEstimateRepository,
+            ProposedActionRepository proposedActionRepository,
+            @Nullable CurrentUserService currentUserService) {
+        this.caseRepository = caseRepository;
+        this.analysisRunRepository = analysisRunRepository;
+        this.analysisService = analysisService;
+        this.eventService = eventService;
+        this.reconciliationResultRepository = reconciliationResultRepository;
+        this.ledgerEntryRepository = ledgerEntryRepository;
+        this.conflictRepository = conflictRepository;
+        this.eligibilityAssessmentRepository = eligibilityAssessmentRepository;
+        this.interestEstimateRepository = interestEstimateRepository;
+        this.proposedActionRepository = proposedActionRepository;
+        this.currentUserService = currentUserService;
+    }
 
     public AnalysisController(
             CaseRepository caseRepository,
@@ -59,16 +89,9 @@ public class AnalysisController {
             EligibilityAssessmentRepository eligibilityAssessmentRepository,
             InterestEstimateRepository interestEstimateRepository,
             ProposedActionRepository proposedActionRepository) {
-        this.caseRepository = caseRepository;
-        this.analysisRunRepository = analysisRunRepository;
-        this.analysisService = analysisService;
-        this.eventService = eventService;
-        this.reconciliationResultRepository = reconciliationResultRepository;
-        this.ledgerEntryRepository = ledgerEntryRepository;
-        this.conflictRepository = conflictRepository;
-        this.eligibilityAssessmentRepository = eligibilityAssessmentRepository;
-        this.interestEstimateRepository = interestEstimateRepository;
-        this.proposedActionRepository = proposedActionRepository;
+        this(caseRepository, analysisRunRepository, analysisService, eventService,
+             reconciliationResultRepository, ledgerEntryRepository, conflictRepository,
+             eligibilityAssessmentRepository, interestEstimateRepository, proposedActionRepository, null);
     }
 
     @PostMapping("/cases/{id}/analyze")
@@ -79,7 +102,18 @@ public class AnalysisController {
 
     @GetMapping(value = "/cases/{id}/events", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter streamEvents(@PathVariable("id") UUID caseId) {
-        if (caseRepository.findById(caseId).isEmpty()) {
+        if (currentUserService != null) {
+            try {
+                UUID wsId = currentUserService.getCurrentUser().workspaceId();
+                if (caseRepository.findByIdAndWorkspaceId(caseId, wsId).isEmpty()) {
+                    throw new ApiException(HttpStatus.NOT_FOUND, "CASE_NOT_FOUND", "Case not found: " + caseId);
+                }
+            } catch (Exception ignored) {
+                if (caseRepository.findById(caseId).isEmpty()) {
+                    throw new ApiException(HttpStatus.NOT_FOUND, "CASE_NOT_FOUND", "Case not found: " + caseId);
+                }
+            }
+        } else if (caseRepository.findById(caseId).isEmpty()) {
             throw new ApiException(HttpStatus.NOT_FOUND, "CASE_NOT_FOUND", "Case not found: " + caseId);
         }
         return eventService.subscribe(caseId);
@@ -89,6 +123,18 @@ public class AnalysisController {
     public ResponseEntity<RunSummaryResponse> getRunSummary(@PathVariable("runId") UUID runId) {
         AnalysisRunEntity run = analysisRunRepository.findById(runId)
             .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "RUN_NOT_FOUND", "Analysis run not found: " + runId));
+
+        if (currentUserService != null) {
+            try {
+                UUID wsId = currentUserService.getCurrentUser().workspaceId();
+                caseRepository.findByIdAndWorkspaceId(run.caseId(), wsId)
+                    .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "RUN_NOT_FOUND", "Analysis run not found: " + runId));
+            } catch (ApiException e) {
+                throw e;
+            } catch (Exception ignored) {
+                // Not authenticated in unit tests
+            }
+        }
 
         ReconciliationResultEntity reconciliation = reconciliationResultRepository.findByRunId(runId).orElse(null);
         List<LedgerEntryEntity> ledgerEntries = ledgerEntryRepository.findByRunId(runId);

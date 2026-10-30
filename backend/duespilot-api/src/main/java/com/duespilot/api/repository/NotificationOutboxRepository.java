@@ -126,28 +126,24 @@ public class NotificationOutboxRepository {
      */
     public List<NotificationOutboxEntity> findRecentSentByCaseAndChannel(UUID caseId, String channelPrefix, Instant since) {
         // Group WHATSAPP_LINK and WHATSAPP_API into WhatsApp channel for cool-down
-        String condition = channelPrefix.startsWith("WHATSAPP")
-            ? "channel IN ('WHATSAPP_LINK', 'WHATSAPP_API')"
-            : "channel = :channel";
+        List<String> channels = channelPrefix.startsWith("WHATSAPP")
+            ? List.of("WHATSAPP_LINK", "WHATSAPP_API")
+            : List.of(channelPrefix);
 
         String sql = """
             SELECT * FROM notification_outbox
             WHERE case_id = :caseId
-              AND """ + condition + """
+              AND channel IN (:channels)
               AND status IN ('SENT', 'DELIVERED', 'MANUAL_PENDING', 'MANUAL_SENT')
               AND (sent_at >= :since OR (sent_at IS NULL AND created_at >= :since))
             ORDER BY created_at DESC
             """;
 
-        var query = jdbcClient.sql(sql)
+        return jdbcClient.sql(sql)
             .param("caseId", caseId)
-            .param("since", Timestamp.from(since));
-
-        if (!channelPrefix.startsWith("WHATSAPP")) {
-            query = query.param("channel", channelPrefix);
-        }
-
-        return query.query(ROW_MAPPER).list();
+            .param("channels", channels)
+            .param("since", Timestamp.from(since))
+            .query(ROW_MAPPER).list();
     }
 
     /**

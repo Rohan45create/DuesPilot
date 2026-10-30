@@ -137,6 +137,17 @@ public class FileStorageService {
         return "";
     }
 
+    public static boolean verifyMagicBytes(byte[] content, String extension) {
+        if (content == null || content.length == 0) return false;
+        return switch (extension.toLowerCase(Locale.ROOT)) {
+            case "pdf" -> content.length >= 4 && content[0] == 0x25 && content[1] == 0x50 && content[2] == 0x44 && content[3] == 0x46; // %PDF
+            case "png" -> content.length >= 8 && (content[0] & 0xFF) == 0x89 && content[1] == 0x50 && content[2] == 0x4E && content[3] == 0x47;
+            case "jpg", "jpeg" -> content.length >= 3 && (content[0] & 0xFF) == 0xFF && (content[1] & 0xFF) == 0xD8 && (content[2] & 0xFF) == 0xFF;
+            case "txt" -> true; // Plaintext UTF-8 / ASCII
+            default -> false;
+        };
+    }
+
     public static String normalizeMimeType(String contentType, String extension) {
         if (contentType != null && !contentType.isBlank() && !contentType.equals("application/octet-stream")) {
             return contentType;
