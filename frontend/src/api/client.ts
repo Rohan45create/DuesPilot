@@ -76,6 +76,8 @@ export async function getAccessToken(): Promise<string | null> {
  * - Attaches Bearer token header if available
  * - Refreshes token automatically on 401 and retries once
  */
+let isRefreshingToken = false;
+
 export async function fetchWithAuth(input: RequestInfo | URL, init: RequestInit = {}): Promise<Response> {
   const token = await getAccessToken();
   const headers = new Headers(init.headers || {});
@@ -86,7 +88,11 @@ export async function fetchWithAuth(input: RequestInfo | URL, init: RequestInit 
   const targetUrl = typeof input === 'string' ? resolveUrl(input) : input;
   let res = await fetch(targetUrl, { ...init, headers });
 
-  if (res.status === 401) {
+  const urlStr = typeof input === 'string' ? input : '';
+  const isMeEndpoint = urlStr.includes('/api/v1/me');
+
+  if (res.status === 401 && !isRefreshingToken && !isMeEndpoint) {
+    isRefreshingToken = true;
     try {
       const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
       if (!refreshError && refreshData.session?.access_token) {
@@ -95,6 +101,8 @@ export async function fetchWithAuth(input: RequestInfo | URL, init: RequestInit 
       }
     } catch {
       // Refresh failed; return original 401
+    } finally {
+      isRefreshingToken = false;
     }
   }
 
@@ -140,7 +148,9 @@ export async function createFetchEventSource(
     signal: options.signal,
   });
 
-  if (res.status === 401) {
+
+  if (res.status === 401 && !isRefreshingToken) {
+    isRefreshingToken = true;
     try {
       const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
       if (!refreshError && refreshData.session?.access_token) {
@@ -154,6 +164,8 @@ export async function createFetchEventSource(
       }
     } catch {
       // Refresh failed
+    } finally {
+      isRefreshingToken = false;
     }
   }
 

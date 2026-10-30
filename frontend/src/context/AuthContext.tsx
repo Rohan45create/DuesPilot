@@ -39,7 +39,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return;
     }
     try {
-      const data = await api.getMe();
+      const profilePromise = api.getMe();
+      const timeoutPromise = new Promise<MeResponse>((_, reject) =>
+        setTimeout(() => reject(new Error('Profile request timeout')), 5000)
+      );
+      const data = await Promise.race([profilePromise, timeoutPromise]);
       setProfile(data);
     } catch {
       // If getMe fails (e.g. backend offline or mock mode), provide fallback
@@ -85,12 +89,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
 
     // 2. Auth state subscription
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, newSession) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, newSession) => {
       if (!mounted) return;
       setSession(newSession);
       setUser(newSession?.user ?? null);
       if (newSession) {
-        await loadProfile(newSession);
+        if (event !== 'TOKEN_REFRESHED') {
+          await loadProfile(newSession);
+        }
       } else {
         setProfile(null);
       }
@@ -128,6 +134,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setSession(data.session);
       setUser(data.user);
       await loadProfile(data.session);
+      setIsLoading(false);
       return { error: null };
     } catch (err: unknown) {
       return { error: err instanceof Error ? err : new Error(String(err)) };
@@ -189,11 +196,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setSession(mockSession);
         setUser(mockUser);
         await loadProfile(mockSession);
+        setIsLoading(false);
         return { error: null };
       }
       setSession(data.session);
       setUser(data.user);
       await loadProfile(data.session);
+      setIsLoading(false);
       return { error: null };
     } catch {
       const mockUser = {
@@ -217,6 +226,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setSession(mockSession);
       setUser(mockUser);
       await loadProfile(mockSession);
+      setIsLoading(false);
       return { error: null };
     }
   }, [loadProfile]);

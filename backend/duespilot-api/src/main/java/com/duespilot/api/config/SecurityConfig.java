@@ -18,6 +18,7 @@ import org.springframework.security.oauth2.jwt.JwtClaimValidator;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtValidators;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
+import org.springframework.security.oauth2.jose.jws.SignatureAlgorithm;
 import org.springframework.security.oauth2.server.resource.web.BearerTokenResolver;
 import org.springframework.security.oauth2.server.resource.web.DefaultBearerTokenResolver;
 import org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter;
@@ -143,7 +144,12 @@ public class SecurityConfig {
         log.info("Configuring Supabase OAuth2 Resource Server. JWKS: {}, Issuer: {}, Audience: authenticated",
             jwksUri, expectedIssuer);
 
-        NimbusJwtDecoder decoder = NimbusJwtDecoder.withJwkSetUri(jwksUri).build();
+        NimbusJwtDecoder decoder = NimbusJwtDecoder.withJwkSetUri(jwksUri)
+            .jwsAlgorithms(algorithms -> {
+                algorithms.add(SignatureAlgorithm.RS256);
+                algorithms.add(SignatureAlgorithm.ES256);
+            })
+            .build();
 
         OAuth2TokenValidator<Jwt> withIssuer = JwtValidators.createDefaultWithIssuer(expectedIssuer);
         OAuth2TokenValidator<Jwt> withAudience = new JwtClaimValidator<List<String>>("aud",
