@@ -11,6 +11,7 @@ import com.duespilot.api.web.error.ApiException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -42,6 +43,7 @@ public class CurrentUserService {
     private final WorkspaceMemberRepository workspaceMemberRepository;
     private final ObjectProvider<DemoDataService> demoDataServiceProvider;
 
+    @Autowired
     public CurrentUserService(
             UserRepository userRepository,
             WorkspaceRepository workspaceRepository,
@@ -51,13 +53,6 @@ public class CurrentUserService {
         this.workspaceRepository = workspaceRepository;
         this.workspaceMemberRepository = workspaceMemberRepository;
         this.demoDataServiceProvider = demoDataServiceProvider;
-    }
-
-    public CurrentUserService(
-            UserRepository userRepository,
-            WorkspaceRepository workspaceRepository,
-            WorkspaceMemberRepository workspaceMemberRepository) {
-        this(userRepository, workspaceRepository, workspaceMemberRepository, null);
     }
 
     public UserContext getCurrentUser() {
