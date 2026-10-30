@@ -150,12 +150,12 @@ export const SettingsPage: React.FC = () => {
     field: K,
     val: NotificationSettings[K]
   ) => {
-    if (isAnonymous) return; // Prevent mutation in demo mode
+    
     setForm((prev) => (prev ? { ...prev, [field]: val } : null));
   };
 
   const handleSave = () => {
-    if (isAnonymous || !form) return;
+    if (!form) return;
     saveMutation.mutate(form);
   };
 
@@ -250,7 +250,7 @@ export const SettingsPage: React.FC = () => {
             <input
               type="text"
               data-testid="settings-business-name"
-              disabled={isAnonymous}
+              
               value={current.businessName}
               onChange={(e) => handleFieldChange('businessName', e.target.value)}
               className="w-full p-2.5 rounded-xl bg-surface-subtle border border-border text-foreground focus:border-brand focus:outline-hidden disabled:opacity-60"
@@ -262,7 +262,7 @@ export const SettingsPage: React.FC = () => {
               MSMEDA Supplier Size Class
             </label>
             <select
-              disabled={isAnonymous}
+              
               data-testid="settings-supplier-size"
               value={current.supplierSizeClass}
               onChange={(e) => handleFieldChange('supplierSizeClass', e.target.value)}
@@ -281,7 +281,7 @@ export const SettingsPage: React.FC = () => {
             <input
               type="date"
               data-testid="settings-udyam-date"
-              disabled={isAnonymous}
+              
               value={current.udyamRegistrationDate || ''}
               onChange={(e) => handleFieldChange('udyamRegistrationDate', e.target.value)}
               className="w-full p-2.5 rounded-xl bg-surface-subtle border border-border text-foreground focus:border-brand focus:outline-hidden disabled:opacity-60"
@@ -295,7 +295,7 @@ export const SettingsPage: React.FC = () => {
             <input
               type="text"
               data-testid="settings-owner-whatsapp"
-              disabled={isAnonymous}
+              
               value={current.ownerWhatsapp}
               onChange={(e) => handleFieldChange('ownerWhatsapp', e.target.value)}
               placeholder="+91 98200 12345"
@@ -320,7 +320,7 @@ export const SettingsPage: React.FC = () => {
               Default Outbox Channel
             </label>
             <select
-              disabled={isAnonymous}
+              
               data-testid="settings-default-channel"
               value={current.defaultChannel}
               onChange={(e) =>
@@ -342,7 +342,7 @@ export const SettingsPage: React.FC = () => {
               Default Draft Language
             </label>
             <select
-              disabled={isAnonymous}
+              
               data-testid="settings-default-lang"
               value={current.defaultLanguage}
               onChange={(e) =>
@@ -360,7 +360,7 @@ export const SettingsPage: React.FC = () => {
               <input
                 type="checkbox"
                 data-testid="settings-include-pdf"
-                disabled={isAnonymous}
+                
                 checked={current.defaultIncludePdf}
                 onChange={(e) => handleFieldChange('defaultIncludePdf', e.target.checked)}
                 className="w-4 h-4 accent-brand rounded cursor-pointer disabled:opacity-60"
@@ -405,7 +405,7 @@ export const SettingsPage: React.FC = () => {
               type="checkbox"
               id="sandbox-toggle"
               data-testid="settings-sandbox-toggle"
-              disabled={isAnonymous}
+              
               checked={current.sandboxMode}
               onChange={(e) => handleFieldChange('sandboxMode', e.target.checked)}
               className="w-4 h-4 mt-0.5 accent-brand rounded cursor-pointer disabled:opacity-60"
@@ -428,7 +428,7 @@ export const SettingsPage: React.FC = () => {
               <input
                 type="email"
                 data-testid="settings-sandbox-email"
-                disabled={isAnonymous}
+                
                 value={current.sandboxEmail}
                 onChange={(e) => handleFieldChange('sandboxEmail', e.target.value)}
                 className="w-full p-2 rounded-lg bg-surface border border-border text-foreground font-mono text-xs focus:border-brand focus:outline-hidden disabled:opacity-60"
@@ -441,7 +441,7 @@ export const SettingsPage: React.FC = () => {
               <input
                 type="text"
                 data-testid="settings-sandbox-phone"
-                disabled={isAnonymous}
+                
                 value={current.sandboxPhone}
                 onChange={(e) => handleFieldChange('sandboxPhone', e.target.value)}
                 className="w-full p-2 rounded-lg bg-surface border border-border text-foreground font-mono text-xs focus:border-brand focus:outline-hidden disabled:opacity-60"

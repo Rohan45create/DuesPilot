@@ -6,7 +6,6 @@ import { FormErrorSummary } from '../components/ui/FormErrorSummary';
 import { api } from '../api/client';
 import { UploadCloud, FileText, AlertCircle, Lock, CheckCircle2, Loader2 } from 'lucide-react';
 import { cn } from '../utils/formatters';
-import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 
 interface UploadedFileItem {
@@ -23,7 +22,6 @@ interface UploadedFileItem {
 
 export const NewCasePage: React.FC = () => {
   const navigate = useNavigate();
-  const { isAnonymous } = useAuth();
   const { showToast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -192,10 +190,7 @@ export const NewCasePage: React.FC = () => {
       showToast('Please fix the errors in the form before submitting.', 'error');
       return;
     }
-    if (isAnonymous) {
-      setShowDemoPrompt(true);
-      return;
-    }
+
     await executeRunAnalysis();
   };
 

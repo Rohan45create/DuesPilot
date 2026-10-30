@@ -106,6 +106,8 @@ public class AnalysisOrchestrator implements AnalysisService {
     private final AnalysisEventService eventService;
     private final LlmProperties llmProperties;
     private final com.duespilot.api.config.DuesPilotProperties duesPilotProperties;
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private com.duespilot.api.repository.WorkspaceRepository workspaceRepository;
 
     private final ExecutorService analysisExecutor = Executors.newVirtualThreadPerTaskExecutor();
 
@@ -184,8 +186,24 @@ public class AnalysisOrchestrator implements AnalysisService {
             throw new ApiException(HttpStatus.CONFLICT, "RUN_IN_PROGRESS", "An analysis run is already in progress for case " + caseId);
         }
 
-        // 2. Check daily budget cap (Rule R-29, R-54) only in live mode
+        // 2. Check daily budget cap (Rule R-29, R-54) and demo live analysis quota in live mode
         if (duesPilotProperties.isLiveMode()) {
+            // Abuse control: maximum 3 live analyses per demo workspace (analyses of seeded cases replay without model calls)
+            if (workspaceRepository != null && !c.isSeed() && !c.isDemoData() && c.workspaceId() != null) {
+                workspaceRepository.findById(c.workspaceId()).ifPresent(ws -> {
+                    if (ws.isDemo()) {
+                        long liveRuns = analysisRunRepository.countLiveRunsByWorkspaceId(ws.id());
+                        if (liveRuns >= 3) {
+                            throw new ApiException(
+                                HttpStatus.TOO_MANY_REQUESTS,
+                                "DEMO_QUOTA_EXCEEDED",
+                                "Demo workspace live analysis quota reached (maximum 3 live runs). Create a free account to run unlimited analyses."
+                            );
+                        }
+                    }
+                });
+            }
+
             long totalCostToday = llmCallRepository.findTotalCostToday();
             if (totalCostToday >= llmProperties.getDailyCostCapMicros()) {
                 throw new ApiException(

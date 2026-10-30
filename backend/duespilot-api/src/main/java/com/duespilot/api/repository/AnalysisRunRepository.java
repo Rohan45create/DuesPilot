@@ -114,4 +114,19 @@ public class AnalysisRunRepository {
             .param("total_cost_micros", totalCostMicros)
             .update();
     }
+
+    public long countLiveRunsByWorkspaceId(UUID workspaceId) {
+        String sql = """
+            SELECT COUNT(*) FROM analysis_runs ar
+            JOIN cases c ON ar.case_id = c.id
+            WHERE c.workspace_id = :workspaceId
+              AND c.is_seed = false
+              AND c.is_demo_data = false
+            """;
+        Long count = jdbcClient.sql(sql)
+            .param("workspaceId", workspaceId)
+            .query(Long.class)
+            .single();
+        return count != null ? count : 0L;
+    }
 }

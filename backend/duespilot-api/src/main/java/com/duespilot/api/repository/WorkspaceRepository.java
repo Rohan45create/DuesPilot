@@ -70,4 +70,17 @@ public class WorkspaceRepository {
             .query(ROW_MAPPER)
             .optional();
     }
+
+    public java.util.List<WorkspaceEntity> findDemoWorkspacesOlderThan(Instant cutoff) {
+        return jdbcClient.sql("SELECT * FROM workspaces WHERE is_demo = true AND created_at < :cutoff AND id != '00000000-0000-0000-0000-000000000001'::uuid")
+            .param("cutoff", Timestamp.from(cutoff))
+            .query(ROW_MAPPER)
+            .list();
+    }
+
+    public boolean deleteById(UUID id) {
+        return jdbcClient.sql("DELETE FROM workspaces WHERE id = :id")
+            .param("id", id)
+            .update() > 0;
+    }
 }

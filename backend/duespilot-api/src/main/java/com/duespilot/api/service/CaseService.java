@@ -6,18 +6,22 @@ import com.duespilot.api.domain.DocType;
 import com.duespilot.api.domain.DocumentEntity;
 import com.duespilot.api.domain.DocumentPageEntity;
 import com.duespilot.api.domain.SupplierCategory;
+import com.duespilot.api.domain.WorkspaceEntity;
 import com.duespilot.api.repository.AuditEventRepository;
 import com.duespilot.api.repository.CaseRepository;
 import com.duespilot.api.repository.DocumentPageRepository;
 import com.duespilot.api.repository.DocumentRepository;
+import com.duespilot.api.repository.WorkspaceRepository;
 import com.duespilot.api.web.dto.CaseDetailResponse;
 import com.duespilot.api.web.dto.CaseResponse;
 import com.duespilot.api.web.dto.CreateCaseRequest;
 import com.duespilot.api.web.dto.DocumentResponse;
+import com.duespilot.api.web.error.ApiException;
 import com.duespilot.api.web.error.CaseNotFoundException;
 import com.duespilot.api.web.error.TooManyDocumentsException;
 import com.duespilot.api.web.error.ValidationException;
 import org.jspecify.annotations.Nullable;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -41,6 +45,7 @@ public class CaseService {
     private final FileStorageService fileStorageService;
     private final TextExtractionService textExtractionService;
     private final @Nullable CurrentUserService currentUserService;
+    private final @Nullable WorkspaceRepository workspaceRepository;
 
     @org.springframework.beans.factory.annotation.Autowired
     public CaseService(
@@ -50,7 +55,8 @@ public class CaseService {
             AuditEventRepository auditEventRepository,
             FileStorageService fileStorageService,
             TextExtractionService textExtractionService,
-            @Nullable CurrentUserService currentUserService) {
+            @Nullable CurrentUserService currentUserService,
+            @Nullable WorkspaceRepository workspaceRepository) {
         this.caseRepository = caseRepository;
         this.documentRepository = documentRepository;
         this.documentPageRepository = documentPageRepository;
@@ -58,6 +64,18 @@ public class CaseService {
         this.fileStorageService = fileStorageService;
         this.textExtractionService = textExtractionService;
         this.currentUserService = currentUserService;
+        this.workspaceRepository = workspaceRepository;
+    }
+
+    public CaseService(
+            CaseRepository caseRepository,
+            DocumentRepository documentRepository,
+            DocumentPageRepository documentPageRepository,
+            AuditEventRepository auditEventRepository,
+            FileStorageService fileStorageService,
+            TextExtractionService textExtractionService,
+            @Nullable CurrentUserService currentUserService) {
+        this(caseRepository, documentRepository, documentPageRepository, auditEventRepository, fileStorageService, textExtractionService, currentUserService, null);
     }
 
     public CaseService(
@@ -67,7 +85,7 @@ public class CaseService {
             AuditEventRepository auditEventRepository,
             FileStorageService fileStorageService,
             TextExtractionService textExtractionService) {
-        this(caseRepository, documentRepository, documentPageRepository, auditEventRepository, fileStorageService, textExtractionService, null);
+        this(caseRepository, documentRepository, documentPageRepository, auditEventRepository, fileStorageService, textExtractionService, null, null);
     }
 
     private UUID resolveWorkspaceId() {
@@ -84,6 +102,22 @@ public class CaseService {
         }
 
         UUID workspaceId = resolveWorkspaceId();
+
+        // Abuse control: maximum 30 cases per demo workspace
+        if (workspaceRepository != null) {
+            workspaceRepository.findById(workspaceId).ifPresent(ws -> {
+                if (ws.isDemo()) {
+                    long count = caseRepository.countByWorkspaceId(workspaceId);
+                    if (count >= 30) {
+                        throw new ApiException(
+                            HttpStatus.TOO_MANY_REQUESTS,
+                            "DEMO_QUOTA_EXCEEDED",
+                            "Demo workspace limit reached (maximum 30 cases). Create a free account to add unlimited cases."
+                        );
+                    }
+                }
+            });
+        }
         String code = request.code();
         if (code == null || code.isBlank()) {
             code = caseRepository.nextCaseCode(workspaceId);
@@ -156,6 +190,26 @@ public class CaseService {
 
         if (files == null || files.isEmpty()) {
             throw new ValidationException("At least one file must be provided.");
+        }
+
+        // Abuse control: maximum 25 MB upload bytes per demo workspace
+        if (workspaceRepository != null) {
+            workspaceRepository.findById(workspaceId).ifPresent(ws -> {
+                if (ws.isDemo()) {
+                    long existingBytes = documentRepository.sumFileSizeBytesByWorkspaceId(workspaceId);
+                    long incomingBytes = 0;
+                    for (MultipartFile f : files) {
+                        incomingBytes += f.getSize();
+                    }
+                    if (existingBytes + incomingBytes > 25L * 1024 * 1024) {
+                        throw new ApiException(
+                            HttpStatus.TOO_MANY_REQUESTS,
+                            "DEMO_QUOTA_EXCEEDED",
+                            "Demo workspace upload quota reached (25 MB limit). Create a free account to upload more files."
+                        );
+                    }
+                }
+            });
         }
 
         long existingCount = documentRepository.countByCaseId(caseId);

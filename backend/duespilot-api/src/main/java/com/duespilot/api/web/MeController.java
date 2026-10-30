@@ -9,7 +9,6 @@ import com.duespilot.api.web.dto.MeResponse;
 import com.duespilot.api.web.dto.UpdateWorkspaceProfileRequest;
 import com.duespilot.api.web.dto.UserProfileResponse;
 import com.duespilot.api.web.dto.WorkspaceResponse;
-import com.duespilot.api.web.error.DemoReadOnlyException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -55,7 +54,7 @@ public class MeController {
             workspace.name() == null ||
             workspace.name().isBlank()
         );
-        FlagsResponse flags = new FlagsResponse(ctx.isAnonymous(), !ctx.isAnonymous(), requiresOnboarding);
+        FlagsResponse flags = new FlagsResponse(false, true, requiresOnboarding);
 
         return ResponseEntity.ok(new MeResponse(user, ws, flags));
     }
@@ -63,10 +62,6 @@ public class MeController {
     @PatchMapping
     public ResponseEntity<MeResponse> updateProfile(@RequestBody UpdateWorkspaceProfileRequest request) {
         CurrentUserService.UserContext ctx = currentUserService.getCurrentUser();
-
-        if (ctx.isAnonymous()) {
-            throw new DemoReadOnlyException();
-        }
 
         WorkspaceEntity existing = workspaceRepository.findById(ctx.workspaceId())
             .orElseThrow(() -> new IllegalStateException("Workspace not found for user: " + ctx.userId()));

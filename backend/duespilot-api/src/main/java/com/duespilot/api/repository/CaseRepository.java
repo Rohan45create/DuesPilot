@@ -38,7 +38,10 @@ public class CaseRepository {
 
     public CaseEntity save(CaseEntity c) {
         UUID id = c.id() != null ? c.id() : UUID.randomUUID();
-        UUID workspaceId = c.workspaceId() != null ? c.workspaceId() : CaseEntity.DEMO_WORKSPACE_ID;
+        UUID workspaceId = c.workspaceId();
+        if (workspaceId == null) {
+            throw new IllegalArgumentException("Case workspace_id must not be null");
+        }
         Instant createdAt = c.createdAt() != null ? c.createdAt() : Instant.now();
 
         String sql = """
@@ -202,6 +205,12 @@ public class CaseRepository {
 
     public int deleteDemoDataByWorkspaceId(UUID workspaceId) {
         return jdbcClient.sql("DELETE FROM cases WHERE workspace_id = :workspaceId AND is_demo_data = true")
+            .param("workspaceId", workspaceId)
+            .update();
+    }
+
+    public int deleteByWorkspaceId(UUID workspaceId) {
+        return jdbcClient.sql("DELETE FROM cases WHERE workspace_id = :workspaceId")
             .param("workspaceId", workspaceId)
             .update();
     }

@@ -23,11 +23,11 @@ export const DemoModeBanner: React.FC = () => {
         </span>
         <div className="flex items-center gap-1.5 font-medium">
           <span className="font-bold text-status-amber uppercase tracking-wider text-[11px]">
-            Demo Mode (Read-Only)
+            Demo Workspace
           </span>
           <span className="text-foreground-muted hidden sm:inline">—</span>
           <span className="text-foreground-muted hidden sm:inline">
-            Exploring with shared sample cases. Live dispute filings and data modifications require an account.
+            Temporary personal demo workspace. Data is automatically deleted after 7 days.
           </span>
         </div>
       </div>

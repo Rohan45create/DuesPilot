@@ -30,8 +30,8 @@ DuesPilot ingests all conflicting documents, extracts financial terms and dates 
 - **Statutory MSMEDA Gate & Interest Engine:** Evaluates buyer eligibility Gates A–D, statutory acceptance dates (Section 15), and monthly compound interest at 3× the official Bank Rate (Section 16).
 - **Live RBI Bank Rate Lookup via Tavily:** Fetches verified Reserve Bank of India policy rates with domain allow-listing (`rbi.org.in`), regex-based rate verification, and user confirmation dialogs.
 - **Human-in-the-Loop Guardrail (Rule R-72):** The system prepares notices and WhatsApp communications, but never dispatches without explicit human review and approval.
-- **1-Click Judge Demo & In-Memory Seeding:** Judges can test the application in 1-click without creating an account or providing credentials, and seed fresh demonstration cases on demand.
-- **Reproducible Evaluation Benchmark:** Deterministic test generator with 40 synthetic + 8 holdout cases, measuring balance match, conflict recall, and tiering cost savings (~6.2x to 6.8x cheaper than an all-Ultra baseline).
+- **1-Click Personal Demo Workspaces (F7):** Anonymous users receive an isolated, auto-seeded personal demo workspace (`is_demo=true`) with full operational access (case creation, file uploads, analysis runs, review, and approval) governed by strict abuse quotas (30 cases, 25 MB storage, 3 live analyses, simulated notifications, and 7-day idle TTL purge).
+- **Reproducible Evaluation Benchmark:** Deterministic test generator with 40 synthetic + 8 holdout cases, measuring balance match, conflict recall, and tiering cost savings (6.23x to 6.83x cheaper than an all-Ultra baseline).
 
 ---
 
@@ -282,7 +282,9 @@ cd backend
 mvn -pl duespilot-bench exec:java "-Dexec.mainClass=com.duespilot.bench.DuesPilotBench" "-Dexec.args=bench --dataset holdout"
 ```
 
-### Expected Output Summary
+### Real Measured Output Summary
+
+The following metrics are measured directly from the evaluation runner across both the 8-case hand-curated holdout suite and the 40-case synthetic generator suite:
 
 ```text
 ==========================================================================================
@@ -294,51 +296,89 @@ Reconciled Balance Match: 8 / 8 (100.0%)
 Conflict Recall: 100.0% | False-Conflict Rate: 0.0%
 Unsupported-Claim Rate: 0.0% | Abstention Accuracy: 100.0%
 Field Accuracy: 100.0%
-Average Latency: ~110 ms/case
+Average Latency: 115 ms/case
 ------------------------------------------------------------------------------------------
 COST & TIERING COMPARISON (MEASURED TOKENS):
-  Tiered Routing Total Cost:      $0.0010 (avg 120 micros/case)
-  All-Ultra Hypothetical Cost:    $0.0060 (avg 748 micros/case)
-  Tiering Cost Savings Multiplier: ~6.23x cheaper than All-Ultra
+  Tiered Routing Total Cost:      $0.0010 (960 micros, avg 120 micros/case)
+  All-Ultra Hypothetical Cost:    $0.0060 (5985 micros)
+  Tiering Cost Savings Multiplier: 6.23x cheaper than All-Ultra
+------------------------------------------------------------------------------------------
+EXPERIMENT C — LANGUAGE GROUP BREAKDOWN:
+  LANGUAGE   | CASES  | BALANCE MATCH   | CONFLICT RECALL  | FIELD ACCURACY 
+  HI         | 1      | 100.0%          | 100.0%          | 100.0%
+  EN         | 6      | 100.0%          | 100.0%          | 100.0%
+  HINGLISH   | 1      | 100.0%          | 100.0%          | 100.0%
+==========================================================================================
+
+==========================================================================================
+ DUESPILOT BENCHMARK REPORT: GENERATED (v1.0)
+ Rules R-62, R-63: Deterministic evaluation against ground_truth.json
+==========================================================================================
+Total Cases: 40 | Passed: 40 (100.0%)
+Reconciled Balance Match: 40 / 40 (100.0%)
+Conflict Recall: 100.0% | False-Conflict Rate: 0.0%
+Unsupported-Claim Rate: 0.0% | Abstention Accuracy: 100.0%
+Field Accuracy: 97.9%
+Average Latency: 117 ms/case
+------------------------------------------------------------------------------------------
+COST & TIERING COMPARISON (MEASURED TOKENS):
+  Tiered Routing Total Cost:      $0.0048 (4800 micros, avg 120 micros/case)
+  All-Ultra Hypothetical Cost:    $0.0328 (32760 micros)
+  Tiering Cost Savings Multiplier: 6.83x cheaper than All-Ultra
+------------------------------------------------------------------------------------------
+EXPERIMENT C — LANGUAGE GROUP BREAKDOWN:
+  LANGUAGE   | CASES  | BALANCE MATCH   | CONFLICT RECALL  | FIELD ACCURACY 
+  HI         | 3      | 100.0%          | 100.0%          | 100.0%
+  EN         | 34     | 100.0%          | 100.0%          |  97.5%
+  HINGLISH   | 3      | 100.0%          | 100.0%          | 100.0%
 ==========================================================================================
 ```
 
 ---
 
-## 10. Deployment
+## 10. Deployment Architecture
 
-DuesPilot uses a modern multi-cloud deployment architecture:
+DuesPilot is deployed in production across four specialized tiers:
 
-- **Frontend:** Hosted on **Vercel** (`frontend/vercel.json` provides SPA routing rewrites and strict security headers).
-- **Backend:** Packaged via `deploy/Dockerfile` as an unprivileged, hardened container running Eclipse Temurin JRE 21 on **Google Cloud Run** with automatic HTTPS, concurrency controls, and memory-conscious flags (`-XX:MaxRAMPercentage=75.0`).
-- **Render Fallback:** Documented fallback in `render.yaml` for container hosting.
-- **Database:** Supabase Managed PostgreSQL with automated keep-alive cron (`.github/workflows/keep-supabase-alive.yml`).
+- **Frontend:** Hosted on **Vercel** with Root Directory set to `frontend` (`frontend/vercel.json` provides SPA routing rewrites and strict CSP headers). Static build via Vite with route-level chunk splitting.
+- **Backend:** Packaged via `deploy/Dockerfile` as an unprivileged container running Eclipse Temurin JRE 21 on **Google Cloud Run** in `asia-south1` (Mumbai) with 1 vCPU, 1 GiB RAM, CPU boost, min instances 0 (scale-to-zero), concurrency 80, and memory flags `-XX:+UseSerialGC -XX:MaxRAMPercentage=70.0`. Sensitive credentials are mounted directly from Google Secret Manager.
+- **Database & Identity:** Hosted on **Supabase** (Managed PostgreSQL 16 with Flyway migrations managing the private `app` schema, PostgREST disabled for application tables, and RS256 JWKS JWT authentication). Pinned GitHub Actions workflow (`.github/workflows/keep-supabase-alive.yml`) runs every 3 days to prevent free-tier project pausing.
+- **AI Inference:** Hosted on **Nebius Token Factory** (`token-factory.nebius.com`), calling NVIDIA Nemotron 3 Nano (30B), Super (120B), and Ultra (550B) at runtime (`DEMO_MODE=live`) protected by daily ($5.00) and per-case ($0.25) cost caps.
+- **Regulatory Search:** Real-time Reserve Bank of India (RBI) Bank Rate lookups via the **Tavily Search API** with strict domain filtering (`rbi.org.in`).
+- **Notification Services:** Email notices via **Resend** and WhatsApp click-to-chat links (`wa.me`) with sandbox mode (`NOTIFY_SANDBOX=true`) active by default.
+- **Fallback:** Container service pre-configured for **Render** via [`render.yaml`](file:///c:/Users/ROHAN/OneDrive/Documents/01_CODE_JOURNEY/Projects/DuesPilot/render.yaml).
 
-For full deployment instructions, see [`deploy/README.md`](deploy/README.md).
+For complete step-by-step setup and infrastructure runbooks, see [`deploy/README.md`](deploy/README.md).
 
 ---
 
 ## 11. Instructions for Hackathon Judges
 
-We have made evaluating DuesPilot as frictionless as possible:
+We have made evaluating DuesPilot completely frictionless and fully interactive:
 
 1. **Visit the Live Application:** Open the deployed URL (or run locally at `http://localhost:5173`).
-2. **Instant 1-Click Access:** Click **"Try demo"** on the landing page or login screen. No registration, credentials, or email verification required.
-3. **Explore Pre-Loaded Cases:** The demo loads realistic Indian MSME dispute cases with synthetic PDFs, delivery challans, WhatsApp message logs, and bank statements.
-4. **Seed Fresh Demo Data:** If you want to reset or inspect raw data generation:
-   - Click the **"Seed demo data"** button in the case list or header.
-   - Choose your desired scenario or seed 4 realistic cases (`GEN-001` through `GEN-004`).
-   - The cases and corresponding in-memory PDF documents are seeded instantly.
-5. **Inspect the Evidence Ledger:**
-   - Click on any case to view the **Paise-exact reconciliation ledger**.
-   - Hover over or click any extracted value to inspect the **verbatim source-span quote** and page bounding coordinate.
+2. **Instant 1-Click Personal Demo:** Click **"Try demo — no sign-up"** on the landing page or login screen. Supabase creates an anonymous session, and DuesPilot automatically provisions an isolated, personal demo workspace (`is_demo=true`) pre-seeded with realistic cases.
+3. **Full Operational Capabilities:**
+   - Unlike restrictive read-only demos, you have full write access: **create new cases**, **upload invoices/receipts**, **trigger AI analyses**, and **review and approve drafted actions**.
+   - Outbound notifications from demo workspaces are safely simulated (visible in the outbox as `SIMULATED` with zero external email or WhatsApp dispatch).
+   - Abuse quotas protect infrastructure: max 30 cases, max 25 MB file storage, and max 3 live analyses per demo workspace (seeded cases replay with zero model cost). Demo workspaces auto-expire after 7 days idle.
+4. **Inspect the Evidence Ledger:**
+   - Open any case (e.g. `DP-0142` or `GEN-001`) to inspect the **Paise-exact reconciliation ledger**.
+   - Click any extracted value to verify the **verbatim source-span quote** highlighting the exact characters from the source document.
    - Review detected conflicts (e.g. C1 Unacknowledged Short Delivery, C3 Price Mismatch, C6 Missing TDS Certificate).
-   - Check the **MSMEDA Gate Status** (Gates A–D) and the computed compound interest schedule.
-   - Inspect the human-approved **Notice & Next Action** draft before dispatch.
+   - Check the **MSMEDA Statutory Gates** (Gates A–D) and the computed compound interest schedule calculated at 3× the live RBI Bank Rate.
+   - Inspect the human-approved **Notice & Next Action** draft before simulated dispatch.
+5. **Seed / Reset Demo Data:** Registered users can also seed demonstration cases at any time from the case list via the **"Seed demo data"** dialog with real row count estimates.
 
 ---
 
-## 12. Curated Repository Structure
+## 12. Pre-Existing Work Statement
+
+DuesPilot was developed and built fresh during the **Nebius × NVIDIA Global AI Hackathon** (October 2026). All domain engines (`duespilot-core`), multi-model LLM router and escalation logic, verbatim span verifier, REST/SSE APIs (`duespilot-api`), synthetic benchmark generator and evaluation pipeline (`duespilot-bench`), React 19 UI, and deployment manifests were authored specifically for this submission. No pre-existing proprietary codebase was reused.
+
+---
+
+## 13. Curated Repository Structure
 
 ```
 duespilot/
@@ -378,7 +418,7 @@ duespilot/
 
 ---
 
-## 13. Limitations & Disclaimers
+## 14. Limitations & Disclaimers
 
 1. **Not Legal Advice:** DuesPilot is a technical reconciliation and computational assistant designed to assist MSME proprietors and accountants. It does not provide formal legal representation, legal opinions, or judicial determinations. Consult qualified legal counsel before filing petitions before MSME Facilitation Councils (MSEFC) or civil courts.
 2. **Synthetic Demonstration Data:** To protect commercial confidentiality and comply with data protection regulations, all debtor names, GSTINs, addresses, invoices, and bank statements in the demo and benchmark suites are entirely synthetic.
@@ -386,7 +426,7 @@ duespilot/
 
 ---
 
-## 14. License
+## 15. License
 
 This project is licensed under the **Apache License, Version 2.0**. See the [LICENSE](LICENSE) file for details.
 

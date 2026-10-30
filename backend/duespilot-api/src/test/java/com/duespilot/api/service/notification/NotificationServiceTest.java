@@ -18,7 +18,6 @@ import com.duespilot.api.repository.ProposedActionRepository;
 import com.duespilot.api.repository.WorkspaceRepository;
 import com.duespilot.api.service.CurrentUserService;
 import com.duespilot.api.web.error.ApiException;
-import com.duespilot.api.web.error.DemoReadOnlyException;
 import tools.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -188,14 +187,21 @@ class NotificationServiceTest {
     }
 
     @Test
-    @DisplayName("R-72: Demo workspace users cannot send notifications")
-    void testDemoUsersBlockedFromSending() {
+    @DisplayName("R-72 / F7: Demo workspace users produce SIMULATED notifications without calling external providers")
+    void testDemoUsersProduceSimulatedNotifications() {
         when(currentUserService.getCurrentUser()).thenReturn(new CurrentUserService.UserContext(
             "demo-user",
             "demo@duespilot.local",
             true,
-            CurrentUserService.DEMO_WORKSPACE_ID
+            testWorkspaceId
         ));
+        when(workspaceRepository.findById(testWorkspaceId)).thenReturn(Optional.of(
+            new WorkspaceEntity(testWorkspaceId, "Demo Workspace", com.duespilot.api.domain.SupplierCategory.MICRO, null, null, null, true, java.time.Instant.now(), 0)
+        ));
+        when(caseRepository.findById(testCaseId)).thenReturn(Optional.of(testCase));
+        when(proposedActionRepository.findById(testActionId)).thenReturn(Optional.of(approvedAction));
+        when(contactRepository.findByWorkspaceAndCaseId(testWorkspaceId, testCaseId)).thenReturn(Optional.of(activeContact));
+        when(outboxRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         NotificationService service = createService(false, LocalTime.of(11, 0));
 
@@ -203,11 +209,12 @@ class NotificationServiceTest {
             testActionId, "EMAIL", null, null, null, null, false, null
         );
 
-        assertThatThrownBy(() -> service.sendNotification(testCaseId, cmd))
-            .isInstanceOf(DemoReadOnlyException.class);
+        NotificationService.NotificationResult result = service.sendNotification(testCaseId, cmd);
 
-        verify(outboxRepository, never()).save(any());
+        org.assertj.core.api.Assertions.assertThat(result.outbox().status()).isEqualTo("SIMULATED");
+        verify(outboxRepository).save(org.mockito.ArgumentMatchers.argThat(outbox -> "SIMULATED".equals(outbox.status())));
         verify(resendClient, never()).sendEmail(any());
+        verify(whatsAppClient, never()).sendTemplateMessage(any(), any(), any());
     }
 
     @Test

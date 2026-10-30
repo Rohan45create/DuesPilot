@@ -7,8 +7,11 @@ import com.duespilot.api.domain.WorkspaceMemberEntity;
 import com.duespilot.api.repository.UserRepository;
 import com.duespilot.api.repository.WorkspaceMemberRepository;
 import com.duespilot.api.repository.WorkspaceRepository;
+import com.duespilot.api.web.error.ApiException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.jwt.Jwt;
@@ -37,14 +40,24 @@ public class CurrentUserService {
     private final UserRepository userRepository;
     private final WorkspaceRepository workspaceRepository;
     private final WorkspaceMemberRepository workspaceMemberRepository;
+    private final ObjectProvider<DemoDataService> demoDataServiceProvider;
+
+    public CurrentUserService(
+            UserRepository userRepository,
+            WorkspaceRepository workspaceRepository,
+            WorkspaceMemberRepository workspaceMemberRepository,
+            ObjectProvider<DemoDataService> demoDataServiceProvider) {
+        this.userRepository = userRepository;
+        this.workspaceRepository = workspaceRepository;
+        this.workspaceMemberRepository = workspaceMemberRepository;
+        this.demoDataServiceProvider = demoDataServiceProvider;
+    }
 
     public CurrentUserService(
             UserRepository userRepository,
             WorkspaceRepository workspaceRepository,
             WorkspaceMemberRepository workspaceMemberRepository) {
-        this.userRepository = userRepository;
-        this.workspaceRepository = workspaceRepository;
-        this.workspaceMemberRepository = workspaceMemberRepository;
+        this(userRepository, workspaceRepository, workspaceMemberRepository, null);
     }
 
     public UserContext getCurrentUser() {
@@ -54,24 +67,25 @@ public class CurrentUserService {
             return fromJwt(jwt);
         }
 
-        // Fallback for unauthenticated or internal calls
-        return new UserContext("demo-user", "demo@duespilot.local", true, DEMO_WORKSPACE_ID);
+        // F7 fix: fail closed with 401 when there is no valid JWT
+        throw new ApiException(
+            HttpStatus.UNAUTHORIZED,
+            "UNAUTHORIZED",
+            "Authentication required. No valid JWT present."
+        );
     }
 
     public UserContext fromJwt(Jwt jwt) {
-        String userId = jwt.getSubject() != null ? jwt.getSubject() : jwt.getClaimAsString("sub");
+        String sub = jwt.getSubject() != null ? jwt.getSubject() : jwt.getClaimAsString("sub");
+        final String userId = (sub != null && !sub.isBlank()) ? sub : "anon-" + UUID.randomUUID();
         String email = jwt.getClaimAsString("email");
         boolean isAnonymous = isAnonymousToken(jwt);
 
-        if (isAnonymous) {
-            return new UserContext(userId != null ? userId : "demo-user", email != null ? email : "demo@duespilot.local", true, DEMO_WORKSPACE_ID);
-        }
-
-        // Normal authenticated user: resolve their personal workspace
+        // F7 fix: Demo users get a personal, auto-seeded workspace instead of the shared read-only fallback
         Optional<UUID> existingWorkspaceId = workspaceMemberRepository.findWorkspaceIdByUserId(userId);
-        UUID workspaceId = existingWorkspaceId.orElseGet(() -> getOrCreateWorkspaceForUser(userId, email));
+        UUID workspaceId = existingWorkspaceId.orElseGet(() -> getOrCreateWorkspaceForUser(userId, email, isAnonymous));
 
-        return new UserContext(userId, email, false, workspaceId);
+        return new UserContext(userId, email, isAnonymous, workspaceId);
     }
 
     public static boolean isAnonymousToken(Jwt jwt) {
@@ -84,14 +98,18 @@ public class CurrentUserService {
         return email == null || email.isBlank();
     }
 
+    public UUID getOrCreateWorkspaceForUser(String userId, String email) {
+        return getOrCreateWorkspaceForUser(userId, email, false);
+    }
+
     @Transactional
-    public synchronized UUID getOrCreateWorkspaceForUser(String userId, String email) {
+    public synchronized UUID getOrCreateWorkspaceForUser(String userId, String email, boolean isDemo) {
         Optional<UUID> existing = workspaceMemberRepository.findWorkspaceIdByUserId(userId);
         if (existing.isPresent()) {
             return existing.get();
         }
 
-        log.info("First sign-in for user {}. Creating user and personal workspace.", userId);
+        log.info("First sign-in for user {} (isDemo={}). Creating user and personal workspace.", userId, isDemo);
 
         // 1. Create User
         userRepository.save(new UserEntity(userId, email, Instant.now()));
@@ -99,7 +117,7 @@ public class CurrentUserService {
         // 2. Create Personal Workspace
         String defaultName = (email != null && !email.isBlank())
             ? email.split("@")[0] + "'s Workspace"
-            : "Personal Workspace";
+            : (isDemo ? "Demo Workspace" : "Personal Workspace");
 
         UUID workspaceId = UUID.randomUUID();
         WorkspaceEntity workspace = new WorkspaceEntity(
@@ -109,7 +127,7 @@ public class CurrentUserService {
             null,
             null,
             null,
-            false,
+            isDemo,
             Instant.now(),
             0
         );
@@ -123,6 +141,18 @@ public class CurrentUserService {
             "OWNER",
             Instant.now()
         ));
+
+        // 4. Auto-seed demo workspace if isDemo
+        if (isDemo && demoDataServiceProvider != null) {
+            DemoDataService demoDataService = demoDataServiceProvider.getIfAvailable();
+            if (demoDataService != null) {
+                try {
+                    demoDataService.seedWorkspaceForDemoUser(workspaceId, userId);
+                } catch (Exception e) {
+                    log.error("Failed to auto-seed demo workspace {}", workspaceId, e);
+                }
+            }
+        }
 
         log.info("Created workspace {} for user {}", workspaceId, userId);
         return workspaceId;

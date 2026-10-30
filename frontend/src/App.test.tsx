@@ -196,7 +196,7 @@ describe('DuesPilot App & Landing Page', () => {
 
     const banner = await screen.findByTestId('demo-mode-banner');
     expect(banner).toBeInTheDocument();
-    expect(banner).toHaveTextContent(/Demo Mode \(Read-Only\)/i);
+    expect(banner).toHaveTextContent(/Demo Workspace/i);
     expect(screen.getByRole('link', { name: /Create account/i })).toBeInTheDocument();
   });
 });

@@ -18,7 +18,6 @@ import com.duespilot.api.repository.WorkspaceRepository;
 import com.duespilot.api.service.CurrentUserService;
 import com.duespilot.api.web.error.ApiException;
 import com.duespilot.api.web.error.CaseNotFoundException;
-import com.duespilot.api.web.error.DemoReadOnlyException;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 import org.jspecify.annotations.Nullable;
@@ -118,17 +117,11 @@ public class NotificationService {
 
     @Transactional
     public NotificationResult sendNotification(UUID caseId, SendNotificationCommand command) {
-        // 1. Authenticate user & Guardrail: Demo users cannot send notifications (R-72)
+        // 1. Authenticate user
         CurrentUserService.UserContext userContext = currentUserService.getCurrentUser();
-        if (userContext.isAnonymous() || CurrentUserService.DEMO_WORKSPACE_ID.equals(userContext.workspaceId())) {
-            throw new DemoReadOnlyException();
-        }
 
         WorkspaceEntity workspace = workspaceRepository.findById(userContext.workspaceId())
             .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "WORKSPACE_NOT_FOUND", "Workspace not found"));
-        if (workspace.isDemo()) {
-            throw new DemoReadOnlyException();
-        }
 
         // 2. Verify Case exists and belongs to current workspace
         CaseEntity caseEntity = caseRepository.findById(caseId)
@@ -296,9 +289,10 @@ public class NotificationService {
 
             String replyTo = (userContext.email() != null && !userContext.email().isBlank()) ? userContext.email() : null;
 
+            boolean isSimulated = isDemoCase || workspace.isDemo() || userContext.isAnonymous();
             ResendClient.SendEmailResult resendResult;
-            if (isDemoCase) {
-                // Simulated notification for demo data: never sent to external providers
+            if (isSimulated) {
+                // Simulated notification for demo data/workspaces: never sent to external providers
                 resendResult = new ResendClient.SendEmailResult(true, "sim-demo-email-" + outboxId, null);
             } else {
                 resendResult = resendClient.sendEmail(new ResendClient.SendEmailRequest(
@@ -312,8 +306,8 @@ public class NotificationService {
                 ));
             }
 
-            String status = resendResult.success() ? "SENT" : "FAILED";
-            Instant sentAt = resendResult.success() ? Instant.now() : null;
+            String status = isSimulated ? "SIMULATED" : (resendResult.success() ? "SENT" : "FAILED");
+            Instant sentAt = (resendResult.success() || isSimulated) ? Instant.now() : null;
 
             outbox = new NotificationOutboxEntity(
                 outboxId,
@@ -335,6 +329,7 @@ public class NotificationService {
             outbox = outboxRepository.save(outbox);
 
         } else if ("WHATSAPP_LINK".equals(channel)) {
+            boolean isSimulated = isDemoCase || workspace.isDemo() || userContext.isAnonymous();
             clickToChatUrl = whatsAppClient.buildClickToChatUrl(dispatchRecipient, maskedBody);
 
             outbox = new NotificationOutboxEntity(
@@ -346,20 +341,21 @@ public class NotificationService {
                 dispatchRecipient,
                 templateKey,
                 maskedBody,
-                "MANUAL_PENDING",
+                isSimulated ? "SIMULATED" : "MANUAL_PENDING",
                 null,
                 null,
                 null,
-                null,
+                isSimulated ? Instant.now() : null,
                 idempotencyKey,
                 Instant.now()
             );
             outbox = outboxRepository.save(outbox);
 
         } else if ("WHATSAPP_API".equals(channel)) {
+            boolean isSimulated = isDemoCase || workspace.isDemo() || userContext.isAnonymous();
             WhatsAppClient.SendWhatsAppResult waResult;
-            if (isDemoCase) {
-                // Simulated notification for demo data: never sent to external providers
+            if (isSimulated) {
+                // Simulated notification for demo data/workspaces: never sent to external providers
                 waResult = new WhatsAppClient.SendWhatsAppResult(true, "sim-demo-wa-" + outboxId, null);
             } else {
                 waResult = whatsAppClient.sendTemplateMessage(
@@ -369,8 +365,8 @@ public class NotificationService {
                 );
             }
 
-            String status = waResult.success() ? "SENT" : "FAILED";
-            Instant sentAt = waResult.success() ? Instant.now() : null;
+            String status = isSimulated ? "SIMULATED" : (waResult.success() ? "SENT" : "FAILED");
+            Instant sentAt = (waResult.success() || isSimulated) ? Instant.now() : null;
 
             outbox = new NotificationOutboxEntity(
                 outboxId,
@@ -408,15 +404,26 @@ public class NotificationService {
     @Transactional
     public NotificationOutboxEntity resendNotification(UUID caseId, UUID outboxId) {
         CurrentUserService.UserContext userContext = currentUserService.getCurrentUser();
-        if (userContext.isAnonymous() || CurrentUserService.DEMO_WORKSPACE_ID.equals(userContext.workspaceId())) {
-            throw new DemoReadOnlyException();
-        }
 
         NotificationOutboxEntity existing = outboxRepository.findByWorkspaceAndId(userContext.workspaceId(), outboxId)
             .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "OUTBOX_NOT_FOUND", "Notification not found"));
 
         if (!"FAILED".equals(existing.status()) && !"BOUNCED".equals(existing.status()) && !"QUEUED".equals(existing.status())) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "CANNOT_RESEND", "Only FAILED, BOUNCED, or QUEUED notifications can be resent");
+        }
+
+        WorkspaceEntity workspace = workspaceRepository.findById(userContext.workspaceId()).orElse(null);
+        boolean isSimulated = workspace != null && workspace.isDemo();
+
+        if (isSimulated) {
+            outboxRepository.updateStatus(
+                existing.id(),
+                "SIMULATED",
+                "sim-demo-resend-" + UUID.randomUUID(),
+                null,
+                Instant.now()
+            );
+            return outboxRepository.findById(existing.id()).orElseThrow();
         }
 
         // Re-dispatch
@@ -458,9 +465,6 @@ public class NotificationService {
     @Transactional
     public NotificationOutboxEntity cancelQueued(UUID caseId, UUID outboxId) {
         CurrentUserService.UserContext userContext = currentUserService.getCurrentUser();
-        if (userContext.isAnonymous() || CurrentUserService.DEMO_WORKSPACE_ID.equals(userContext.workspaceId())) {
-            throw new DemoReadOnlyException();
-        }
 
         NotificationOutboxEntity existing = outboxRepository.findByWorkspaceAndId(userContext.workspaceId(), outboxId)
             .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "OUTBOX_NOT_FOUND", "Notification not found"));
@@ -476,9 +480,6 @@ public class NotificationService {
     @Transactional
     public NotificationOutboxEntity markManualSent(UUID caseId, UUID outboxId) {
         CurrentUserService.UserContext userContext = currentUserService.getCurrentUser();
-        if (userContext.isAnonymous() || CurrentUserService.DEMO_WORKSPACE_ID.equals(userContext.workspaceId())) {
-            throw new DemoReadOnlyException();
-        }
 
         NotificationOutboxEntity existing = outboxRepository.findByWorkspaceAndId(userContext.workspaceId(), outboxId)
             .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "OUTBOX_NOT_FOUND", "Notification not found"));

@@ -52,7 +52,7 @@ async function setupMocks(page: any) {
         isDemo: true,
       },
       flags: {
-        demoReadOnly: true,
+        demoReadOnly: false,
         canCreateCases: true,
         requiresOnboarding: false,
       },

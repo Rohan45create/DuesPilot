@@ -2,9 +2,11 @@ package com.duespilot.api.service;
 
 import com.duespilot.api.domain.CaseEntity;
 import com.duespilot.api.domain.DocumentEntity;
+import com.duespilot.api.domain.WorkspaceEntity;
 import com.duespilot.api.repository.CaseRepository;
 import com.duespilot.api.repository.DocumentRepository;
 import com.duespilot.api.repository.FileBlobRepository;
+import com.duespilot.api.repository.WorkspaceRepository;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -18,8 +20,8 @@ import java.time.Instant;
 import java.util.List;
 
 /**
- * Service to purge uploaded non-seed cases after 7 days and delete orphaned blobs from app.file_blobs
- * per Architecture section 11 & 16.
+ * Service to purge uploaded non-seed cases and idle demo workspaces after 7 days,
+ * and delete orphaned blobs from app.file_blobs per Architecture section 11 & 16.
  */
 @Service
 public class CaseRetentionService {
@@ -30,24 +32,35 @@ public class CaseRetentionService {
     private final DocumentRepository documentRepository;
     private final FileStorageService fileStorageService;
     private final @Nullable FileBlobRepository fileBlobRepository;
+    private final @Nullable WorkspaceRepository workspaceRepository;
 
     @Autowired
     public CaseRetentionService(
             CaseRepository caseRepository,
             DocumentRepository documentRepository,
             FileStorageService fileStorageService,
-            @Nullable FileBlobRepository fileBlobRepository) {
+            @Nullable FileBlobRepository fileBlobRepository,
+            @Nullable WorkspaceRepository workspaceRepository) {
         this.caseRepository = caseRepository;
         this.documentRepository = documentRepository;
         this.fileStorageService = fileStorageService;
         this.fileBlobRepository = fileBlobRepository;
+        this.workspaceRepository = workspaceRepository;
+    }
+
+    public CaseRetentionService(
+            CaseRepository caseRepository,
+            DocumentRepository documentRepository,
+            FileStorageService fileStorageService,
+            @Nullable FileBlobRepository fileBlobRepository) {
+        this(caseRepository, documentRepository, fileStorageService, fileBlobRepository, null);
     }
 
     public CaseRetentionService(
             CaseRepository caseRepository,
             DocumentRepository documentRepository,
             FileStorageService fileStorageService) {
-        this(caseRepository, documentRepository, fileStorageService, null);
+        this(caseRepository, documentRepository, fileStorageService, null, null);
     }
 
     /**
@@ -55,7 +68,9 @@ public class CaseRetentionService {
      */
     @Scheduled(cron = "${duespilot.retention.cron:0 0 2 * * *}")
     public int purgeExpiredCases() {
-        return purgeExpiredCasesOlderThan(Duration.ofDays(7));
+        int casesPurged = purgeExpiredCasesOlderThan(Duration.ofDays(7));
+        int workspacesPurged = purgeExpiredDemoWorkspacesOlderThan(Duration.ofDays(7));
+        return casesPurged + workspacesPurged;
     }
 
     /**
@@ -101,6 +116,32 @@ public class CaseRetentionService {
         return purgedCount;
     }
 
+    /**
+     * Purges idle demo workspaces older than 7 days and their associated data (F7).
+     */
+    @Transactional
+    public int purgeExpiredDemoWorkspacesOlderThan(Duration retentionPeriod) {
+        if (workspaceRepository == null) return 0;
+        Instant cutoff = Instant.now().minus(retentionPeriod);
+        List<WorkspaceEntity> expired = workspaceRepository.findDemoWorkspacesOlderThan(cutoff);
+
+        int purged = 0;
+        for (WorkspaceEntity ws : expired) {
+            log.info("Purging expired idle demo workspace {} (created: {})", ws.id(), ws.createdAt());
+            documentRepository.deleteByWorkspaceId(ws.id());
+            caseRepository.deleteByWorkspaceId(ws.id());
+            workspaceRepository.deleteById(ws.id());
+            purged++;
+        }
+
+        if (purged > 0) {
+            purgeOrphanedBlobs();
+            log.info("Successfully purged {} expired demo workspaces", purged);
+        }
+
+        return purged;
+    }
+
     public int purgeOrphanedBlobs() {
         if (fileBlobRepository != null) {
             int deletedBlobs = fileBlobRepository.deleteOrphanedBlobs();
@@ -110,6 +151,10 @@ public class CaseRetentionService {
             return deletedBlobs;
         }
         return 0;
+    }
+
+    public static boolean isSystemSeedCase(CaseEntity c) {
+        return isDemoCase(c);
     }
 
     public static boolean isDemoCase(CaseEntity c) {

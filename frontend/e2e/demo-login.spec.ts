@@ -42,8 +42,8 @@ test.describe('DuesPilot Authentication & Demo Login Flow', () => {
           isDemo: true,
         },
         flags: {
-          demoReadOnly: true,
-          canCreateCases: false,
+          demoReadOnly: false,
+          canCreateCases: true,
           requiresOnboarding: false,
         },
       };
@@ -75,7 +75,7 @@ test.describe('DuesPilot Authentication & Demo Login Flow', () => {
     // Verify persistent demo mode banner is rendered
     const banner = page.getByTestId('demo-mode-banner');
     await expect(banner).toBeVisible();
-    await expect(banner).toContainText(/Demo Mode \(Read-Only\)/i);
+    await expect(banner).toContainText(/Demo Workspace/i);
 
     // Click "Create account" button on the demo banner
     const createAccountCta = page.getByTestId('demo-banner-signup-btn');

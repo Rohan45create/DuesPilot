@@ -51,7 +51,7 @@ test.describe('DuesPilot Interaction Matrix E2E Test Suite', () => {
           isDemo: true,
         },
         flags: {
-          demoReadOnly: true,
+          demoReadOnly: false,
           canCreateCases: true,
           requiresOnboarding: false,
         },

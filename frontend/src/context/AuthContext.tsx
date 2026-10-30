@@ -57,8 +57,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           isDemo: Boolean(currentSession.user.is_anonymous),
         },
         flags: {
-          demoReadOnly: Boolean(currentSession.user.is_anonymous),
-          canCreateCases: !currentSession.user.is_anonymous,
+          demoReadOnly: false,
+          canCreateCases: true,
           requiresOnboarding: false,
         },
       });

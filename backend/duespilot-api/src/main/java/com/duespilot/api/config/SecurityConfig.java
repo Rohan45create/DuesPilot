@@ -84,8 +84,7 @@ public class SecurityConfig {
             CorsConfigurationSource corsConfigurationSource,
             BearerTokenResolver bearerTokenResolver,
             JwtDecoder jwtDecoder,
-            RateLimitingFilter rateLimitingFilter,
-            DemoReadOnlyFilter demoReadOnlyFilter) throws Exception {
+            RateLimitingFilter rateLimitingFilter) throws Exception {
 
         http
             .cors(cors -> cors.configurationSource(corsConfigurationSource))
@@ -119,8 +118,7 @@ public class SecurityConfig {
                 })
             )
             // F6 fix: RateLimitingFilter runs AFTER BearerTokenAuthenticationFilter so authenticated user identity is available
-            .addFilterAfter(rateLimitingFilter, BearerTokenAuthenticationFilter.class)
-            .addFilterAfter(demoReadOnlyFilter, RateLimitingFilter.class);
+            .addFilterAfter(rateLimitingFilter, BearerTokenAuthenticationFilter.class);
 
         return http.build();
     }

@@ -273,27 +273,28 @@ class SupabaseAuthIntegrationTest {
     }
 
     @Test
-    @DisplayName("Anonymous users: Write operations return 403 DEMO_READ_ONLY")
-    void testAnonymousWritesReturnDemoReadOnly() throws Exception {
+    @DisplayName("Anonymous users: Receive full-access personal workspace (F7)")
+    void testAnonymousUsersHaveFullAccessPersonalWorkspace() throws Exception {
         String anonUserId = "anon-" + UUID.randomUUID();
         String anonToken = generateJwt(anonUserId, null, true, "authenticated", Instant.now().plus(1, ChronoUnit.HOURS));
 
-        // GET /api/v1/cases is permitted (reads shared demo workspace)
+        // GET /api/v1/cases is permitted (reads personal workspace cases)
         mockMvc.perform(get("/api/v1/cases")
                 .header("Authorization", "Bearer " + anonToken))
             .andExpect(status().isOk());
 
-        // GET /api/v1/me is permitted and shows demoReadOnly = true
+        // GET /api/v1/me shows demoReadOnly = false and canCreateCases = true
         mockMvc.perform(get("/api/v1/me")
                 .header("Authorization", "Bearer " + anonToken))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.user.isAnonymous").value(true))
-            .andExpect(jsonPath("$.flags.demoReadOnly").value(true));
+            .andExpect(jsonPath("$.flags.demoReadOnly").value(false))
+            .andExpect(jsonPath("$.flags.canCreateCases").value(true));
 
-        // POST /api/v1/cases (Write) must return 403 DEMO_READ_ONLY
+        // POST /api/v1/cases (Write) succeeds in personal demo workspace
         String writeCasePayload = """
             {
-              "title": "Anonymous Attempted Case",
+              "title": "Anonymous Personal Demo Case",
               "supplierCategory": "MICRO"
             }
             """;
@@ -302,14 +303,13 @@ class SupabaseAuthIntegrationTest {
                 .header("Authorization", "Bearer " + anonToken)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(writeCasePayload))
-            .andExpect(status().isForbidden())
-            .andExpect(jsonPath("$.code").value("DEMO_READ_ONLY"))
-            .andExpect(jsonPath("$.message").value("Demo workspace is read-only. Please sign up to create and edit cases."));
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.title").value("Anonymous Personal Demo Case"));
 
-        // PATCH /api/v1/me (Write) must return 403 DEMO_READ_ONLY
+        // PATCH /api/v1/me (Write) succeeds in personal demo workspace
         String patchPayload = """
             {
-              "businessName": "Updated Business"
+              "businessName": "Updated Demo MSME"
             }
             """;
 
@@ -317,8 +317,8 @@ class SupabaseAuthIntegrationTest {
                 .header("Authorization", "Bearer " + anonToken)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(patchPayload))
-            .andExpect(status().isForbidden())
-            .andExpect(jsonPath("$.code").value("DEMO_READ_ONLY"));
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.workspace.name").value("Updated Demo MSME"));
     }
 
     @Test

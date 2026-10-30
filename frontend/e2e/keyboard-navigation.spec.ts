@@ -51,7 +51,7 @@ test.describe('Keyboard Navigation & Interactive Feedback E2E', () => {
           isDemo: true,
         },
         flags: {
-          demoReadOnly: true,
+          demoReadOnly: false,
           canCreateCases: true,
           requiresOnboarding: false,
         },

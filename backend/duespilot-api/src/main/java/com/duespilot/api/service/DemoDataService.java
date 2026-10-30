@@ -32,7 +32,6 @@ import com.duespilot.api.web.dto.DemoDataPreviewResponse;
 import com.duespilot.api.web.dto.SeedDemoDataRequest;
 import com.duespilot.api.web.dto.SeedDemoDataResponse;
 import com.duespilot.api.web.error.ApiException;
-import com.duespilot.api.web.error.DemoReadOnlyException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -145,11 +144,15 @@ public class DemoDataService {
     }
 
     @Transactional
-    public SeedDemoDataResponse seedDemoData(CurrentUserService.UserContext ctx, SeedDemoDataRequest request) {
-        if (ctx.isAnonymous() || CaseEntity.DEMO_WORKSPACE_ID.equals(ctx.workspaceId())) {
-            throw new DemoReadOnlyException();
+    public void seedWorkspaceForDemoUser(UUID workspaceId, String userId) {
+        if (caseRepository.hasDemoData(workspaceId)) {
+            return;
         }
+        performWorkspaceSeeding(workspaceId, userId);
+    }
 
+    @Transactional
+    public SeedDemoDataResponse seedDemoData(CurrentUserService.UserContext ctx, SeedDemoDataRequest request) {
         if (request == null || !Boolean.TRUE.equals(request.acknowledged())) {
             throw new ApiException(
                 HttpStatus.BAD_REQUEST,
@@ -170,6 +173,16 @@ public class DemoDataService {
 
         enforceRateLimit(workspaceId);
 
+        int count = performWorkspaceSeeding(workspaceId, ctx.userId());
+        return new SeedDemoDataResponse(
+            true,
+            count,
+            "Successfully added " + count + " synthetic demo cases to your workspace."
+        );
+    }
+
+    @Transactional
+    public int performWorkspaceSeeding(UUID workspaceId, String userId) {
         ensureSeedTemplatesExist();
 
         List<CaseEntity> seedCases = caseRepository.findSeedCases();
@@ -351,26 +364,18 @@ public class DemoDataService {
         auditEventRepository.save(new AuditEventEntity(
             UUID.randomUUID(),
             null,
-            ctx.userId(),
+            userId,
             "DEMO_DATA_SEEDED",
             String.format("{\"workspaceId\":\"%s\",\"casesSeeded\":%d}", workspaceId, seedCases.size()),
             Instant.now()
         ));
 
         log.info("Workspace {} successfully seeded with {} demo cases", workspaceId, seedCases.size());
-        return new SeedDemoDataResponse(
-            true,
-            seedCases.size(),
-            "Successfully added " + seedCases.size() + " synthetic demo cases to your workspace."
-        );
+        return seedCases.size();
     }
 
     @Transactional
     public DeleteDemoDataResponse deleteDemoData(CurrentUserService.UserContext ctx) {
-        if (ctx.isAnonymous() || CaseEntity.DEMO_WORKSPACE_ID.equals(ctx.workspaceId())) {
-            throw new DemoReadOnlyException();
-        }
-
         UUID workspaceId = ctx.workspaceId();
 
         // Deletes only rows marked is_demo_data = true (cascades to documents, runs, etc.)

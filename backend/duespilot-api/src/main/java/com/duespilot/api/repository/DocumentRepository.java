@@ -27,7 +27,7 @@ public class DocumentRepository {
         return new DocumentEntity(
             (UUID) rs.getObject("id"),
             (UUID) rs.getObject("case_id"),
-            rs.getObject("workspace_id") != null ? (UUID) rs.getObject("workspace_id") : DocumentEntity.DEMO_WORKSPACE_ID,
+            (UUID) rs.getObject("workspace_id"),
             DocType.fromString(rs.getString("doc_type")),
             rs.getString("file_name"),
             rs.getString("mime_type"),
@@ -44,7 +44,10 @@ public class DocumentRepository {
 
     public DocumentEntity save(DocumentEntity doc) {
         UUID id = doc.id() != null ? doc.id() : UUID.randomUUID();
-        UUID workspaceId = doc.workspaceId() != null ? doc.workspaceId() : DocumentEntity.DEMO_WORKSPACE_ID;
+        UUID workspaceId = doc.workspaceId();
+        if (workspaceId == null) {
+            throw new IllegalArgumentException("Document workspace_id must not be null");
+        }
         Instant createdAt = doc.createdAt() != null ? doc.createdAt() : Instant.now();
         int sizeBytes = doc.fileSizeBytes() > 0 ? doc.fileSizeBytes()
             : (doc.contentBytes() != null ? doc.contentBytes().length : 0);
@@ -116,5 +119,19 @@ public class DocumentRepository {
             .param("id", id)
             .update();
         return rows > 0;
+    }
+
+    public long sumFileSizeBytesByWorkspaceId(UUID workspaceId) {
+        Long sum = jdbcClient.sql("SELECT COALESCE(SUM(file_size_bytes), 0) FROM documents WHERE workspace_id = :workspaceId")
+            .param("workspaceId", workspaceId)
+            .query(Long.class)
+            .single();
+        return sum != null ? sum : 0L;
+    }
+
+    public int deleteByWorkspaceId(UUID workspaceId) {
+        return jdbcClient.sql("DELETE FROM documents WHERE workspace_id = :workspaceId")
+            .param("workspaceId", workspaceId)
+            .update();
     }
 }

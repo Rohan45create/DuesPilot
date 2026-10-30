@@ -107,7 +107,8 @@ class MeControllerWebTest {
         mockMvc.perform(get("/api/v1/me"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.user.isAnonymous").value(true))
-            .andExpect(jsonPath("$.flags.demoReadOnly").value(true))
+            .andExpect(jsonPath("$.flags.demoReadOnly").value(false))
+            .andExpect(jsonPath("$.flags.canCreateCases").value(true))
             .andExpect(jsonPath("$.flags.requiresOnboarding").value(false));
     }
 
