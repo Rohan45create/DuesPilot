@@ -88,7 +88,7 @@ export const CasesListPage: React.FC = () => {
 
   const uniqueBuyers = useMemo(() => {
     if (!casesList) return [];
-    return Array.from(new Set(casesList.map((c) => c.buyerName)));
+    return Array.from(new Set(casesList.map((c) => c.buyerName || (c as any).buyer_name || c.title || 'Unknown Buyer')));
   }, [casesList]);
 
   // Filter cases
@@ -99,21 +99,25 @@ export const CasesListPage: React.FC = () => {
         return false;
       }
 
+      const code = c.code || '';
+      const buyer = c.buyerName || (c as any).buyer_name || '';
+      const title = c.title || '';
       const matchesSearch =
-        c.code.toLowerCase().includes(search.toLowerCase()) ||
-        c.buyerName.toLowerCase().includes(search.toLowerCase()) ||
-        c.title.toLowerCase().includes(search.toLowerCase());
+        code.toLowerCase().includes(search.toLowerCase()) ||
+        buyer.toLowerCase().includes(search.toLowerCase()) ||
+        title.toLowerCase().includes(search.toLowerCase());
 
       const matchesStatus =
         selectedStatus === 'ALL' || c.status === selectedStatus;
 
       const matchesBuyer =
-        selectedBuyer === 'ALL' || c.buyerName === selectedBuyer;
+        selectedBuyer === 'ALL' || buyer === selectedBuyer;
 
+      const conflicts = c.conflicts || [];
       const matchesConflict =
         selectedConflictType === 'ALL' ||
-        (selectedConflictType === 'WITH_CONFLICTS' && c.conflicts.length > 0) ||
-        (selectedConflictType === 'NO_CONFLICTS' && c.conflicts.length === 0);
+        (selectedConflictType === 'WITH_CONFLICTS' && conflicts.length > 0) ||
+        (selectedConflictType === 'NO_CONFLICTS' && conflicts.length === 0);
 
       return matchesSearch && matchesStatus && matchesBuyer && matchesConflict;
     });
@@ -123,16 +127,20 @@ export const CasesListPage: React.FC = () => {
   const sortedCases = useMemo(() => {
     return [...filteredCases].sort((a, b) => {
       let cmp = 0;
-      if (sortField === 'code') cmp = a.code.localeCompare(b.code);
-      else if (sortField === 'buyerName') cmp = a.buyerName.localeCompare(b.buyerName);
-      else if (sortField === 'invoicedPaise') cmp = a.invoicedPaise - b.invoicedPaise;
-      else if (sortField === 'confirmedPaidPaise') cmp = a.confirmedPaidPaise - b.confirmedPaidPaise;
+      if (sortField === 'code') cmp = (a.code || '').localeCompare(b.code || '');
+      else if (sortField === 'buyerName') {
+        const aBuyer = a.buyerName || (a as any).buyer_name || '';
+        const bBuyer = b.buyerName || (b as any).buyer_name || '';
+        cmp = aBuyer.localeCompare(bBuyer);
+      }
+      else if (sortField === 'invoicedPaise') cmp = (a.invoicedPaise || 0) - (b.invoicedPaise || 0);
+      else if (sortField === 'confirmedPaidPaise') cmp = (a.confirmedPaidPaise || 0) - (b.confirmedPaidPaise || 0);
       else if (sortField === 'reconciledBalancePaise') {
         const balA = a.reconciledBalancePaise ?? -1;
         const balB = b.reconciledBalancePaise ?? -1;
         cmp = balA - balB;
-      } else if (sortField === 'conflicts') cmp = a.conflicts.length - b.conflicts.length;
-      else if (sortField === 'status') cmp = a.status.localeCompare(b.status);
+      } else if (sortField === 'conflicts') cmp = (a.conflicts || []).length - (b.conflicts || []).length;
+      else if (sortField === 'status') cmp = (a.status || '').localeCompare(b.status || '');
 
       return sortDir === 'asc' ? cmp : -cmp;
     });
@@ -157,7 +165,7 @@ export const CasesListPage: React.FC = () => {
       formatPaiseToRupees(c.invoicedPaise),
       formatPaiseToRupees(c.confirmedPaidPaise),
       c.reconciledBalancePaise !== null ? formatPaiseToRupees(c.reconciledBalancePaise) : 'Cannot determine',
-      c.conflicts.length,
+      (c.conflicts || []).length,
       c.status,
       c.lastRunAt || 'N/A',
     ].join(','));
@@ -516,9 +524,9 @@ export const CasesListPage: React.FC = () => {
                         {c.buyerName}
                       </div>
                       <div className="text-[11px] text-foreground-muted mt-0.5">
-                        {c.conflicts.length > 0 ? (
+                        {(c.conflicts || []).length > 0 ? (
                           <span className="text-amber-500 font-medium">
-                            {c.conflicts.length} open conflict{c.conflicts.length > 1 ? 's' : ''}
+                            {(c.conflicts || []).length} open conflict{(c.conflicts || []).length > 1 ? 's' : ''}
                           </span>
                         ) : (
                           <span className="text-brand font-medium">Clean reconciliation</span>
@@ -631,7 +639,7 @@ export const CasesListPage: React.FC = () => {
                           )}
                         </td>
                         <td className="py-3.5 px-3 text-foreground font-medium">
-                          {c.conflicts.length}
+                          {(c.conflicts || []).length}
                         </td>
                         <td className="py-3.5 px-3">
                           <div className="flex items-center gap-1.5" aria-label="Gate statuses A, B, C, D">

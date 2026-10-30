@@ -226,6 +226,44 @@ export async function createFetchEventSource(
 
 let mockDemoDataSeeded = false;
 
+export function normalizeCase(raw: any): CaseDetail {
+  if (!raw) return MOCK_CASE_DP0142;
+  const buyerName = raw.buyerName || raw.buyer_name || raw.title || 'Unknown Buyer';
+  const supplierName = raw.supplierName || raw.supplier_name || 'My Business';
+  return {
+    id: String(raw.id || ''),
+    code: String(raw.code || 'DP-0000'),
+    title: String(raw.title || buyerName),
+    supplierName,
+    buyerName,
+    supplierSizeClass: raw.supplierSizeClass || raw.supplier_category || 'MICRO',
+    udyamRegDate: raw.udyamRegDate || raw.udyam_registered_on || null,
+    status: raw.status || (raw.latest_run && raw.latest_run.status) || 'NEEDS_REVIEW',
+    invoicedPaise: typeof raw.invoicedPaise === 'number' ? raw.invoicedPaise : (raw.invoiced_paise ?? 0),
+    confirmedPaidPaise: typeof raw.confirmedPaidPaise === 'number' ? raw.confirmedPaidPaise : (raw.confirmed_paid_paise ?? 0),
+    creditNotePaise: typeof raw.creditNotePaise === 'number' ? raw.creditNotePaise : (raw.credit_note_paise ?? 0),
+    reconciledBalancePaise: raw.reconciledBalancePaise ?? raw.reconciled_balance_paise ?? null,
+    documents: Array.isArray(raw.documents) ? raw.documents : [],
+    ledger: Array.isArray(raw.ledger) ? raw.ledger : [],
+    conflicts: Array.isArray(raw.conflicts) ? raw.conflicts : [],
+    gates: Array.isArray(raw.gates) ? raw.gates : [],
+    interest: raw.interest || {
+      principalPaise: 0,
+      interestPaise: 0,
+      totalDuePaise: 0,
+      daysOverdue: 0,
+      applicableRatePercent: 0,
+      rateType: 'RBI_BASE_PLUS_SPREAD',
+    },
+    proposedAction: raw.proposedAction || null,
+    auditTrail: Array.isArray(raw.auditTrail) ? raw.auditTrail : [],
+    lastRunAt: raw.lastRunAt || raw.created_at || new Date().toISOString(),
+    isDemoData: Boolean(raw.isDemoData || raw.is_demo_data || raw.is_seed),
+    is_demo_data: Boolean(raw.isDemoData || raw.is_demo_data || raw.is_seed),
+    createdAt: raw.createdAt || raw.created_at || new Date().toISOString(),
+  };
+}
+
 export const api = {
   async getMe(): Promise<MeResponse> {
     const fallbackProfile: MeResponse = {
@@ -325,7 +363,14 @@ export const api = {
       if (res.ok) {
         const text = await res.text();
         try {
-          return JSON.parse(text);
+          const list = JSON.parse(text);
+          if (Array.isArray(list)) {
+            if (list.length === 0) {
+              return MOCK_CASES_LIST;
+            }
+            return list.map(normalizeCase);
+          }
+          return MOCK_CASES_LIST;
         } catch {
           return MOCK_CASES_LIST;
         }

@@ -88,6 +88,19 @@ public class ApiExceptionHandler {
         return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS).body(problemDetail);
     }
 
+    @ExceptionHandler(org.springframework.web.servlet.resource.NoResourceFoundException.class)
+    public ResponseEntity<ProblemDetail> handleNoResourceFound(org.springframework.web.servlet.resource.NoResourceFoundException ex) {
+        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(
+            HttpStatus.NOT_FOUND,
+            "Resource not found: " + ex.getResourcePath()
+        );
+        problemDetail.setTitle("Not Found");
+        problemDetail.setType(URI.create(ERROR_BASE_URL + "not_found"));
+        problemDetail.setProperty("code", "NOT_FOUND");
+
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(problemDetail);
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ProblemDetail> handleGenericException(Exception ex) {
         log.error("Unhandled server exception caught by ApiExceptionHandler", ex);
