@@ -13,6 +13,8 @@ import com.duespilot.core.extract.VerifiedField;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.text.PDFTextStripper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.json.JsonMapper;
@@ -31,8 +33,9 @@ import java.util.UUID;
 
 /**
  * Opt-in live benchmark runner to extract one generated benchmark case
- * directly from the database (or filesystem fallback) and print field-level accuracy against ground truth.
+ * directly from the database and print field-level accuracy against ground truth.
  *
+ * Files live in the database only — there is no filesystem fallback.
  * Implements architecture.md section 14 and rules R-26, R-27, R-32, R-61.
  *
  * Usage:
@@ -40,11 +43,11 @@ import java.util.UUID;
  */
 public final class CaseExtractionBenchmarkRunner {
 
+    private static final Logger log = LoggerFactory.getLogger(CaseExtractionBenchmarkRunner.class);
     private static final ObjectMapper MAPPER = JsonMapper.builder().build();
 
     public static void main(String[] args) {
         String caseCode = "GEN-001";
-        Path dataDir = Paths.get("benchmark-data", "generated");
         boolean mock = false;
 
         int i = 0;
@@ -56,15 +59,13 @@ public final class CaseExtractionBenchmarkRunner {
             String arg = args[i];
             if ("--case".equalsIgnoreCase(arg) && i + 1 < args.length) {
                 caseCode = args[++i];
-            } else if ("--data".equalsIgnoreCase(arg) && i + 1 < args.length) {
-                dataDir = Paths.get(args[++i]);
             } else if ("--mock".equalsIgnoreCase(arg)) {
                 mock = true;
             }
             i++;
         }
 
-        // 1. Try loading from database first
+        // Load from database — files live in DB only (no filesystem fallback)
         try (BenchmarkDatabaseRepository dbRepo = BenchmarkDatabaseRepository.createStandalone()) {
             String gtJson = null;
             String dataset = caseCode.startsWith("HOLD-") ? "holdout" : "generated";
@@ -72,7 +73,6 @@ public final class CaseExtractionBenchmarkRunner {
             if (gtOpt.isPresent()) {
                 gtJson = gtOpt.get();
             } else {
-                // Try the other dataset as fallback
                 String otherDataset = dataset.equals("holdout") ? "generated" : "holdout";
                 gtOpt = dbRepo.findCaseGroundTruth(otherDataset, caseCode);
                 if (gtOpt.isPresent()) {
@@ -81,46 +81,24 @@ public final class CaseExtractionBenchmarkRunner {
                 }
             }
 
-            if (gtJson != null) {
-                System.out.printf("Loaded case %s from database (dataset: %s)%n", caseCode, dataset);
-                JsonNode groundTruth = MAPPER.readTree(gtJson);
-
-                List<BenchmarkDatabaseRepository.BenchmarkFileRecord> fileRecs = dbRepo.findCaseFiles(dataset, caseCode);
-                Map<String, byte[]> fileMap = new HashMap<>();
-                for (var fr : fileRecs) {
-                    dbRepo.findBlobBytes(fr.blobSha256()).ifPresent(bytes -> fileMap.put(fr.fileName(), bytes));
-                }
-
-                runExtractionAndScoreInMemory(caseCode, groundTruth, fileMap, mock);
+            if (gtJson == null) {
+                log.error("Case {} not found in database (tried both 'generated' and 'holdout' datasets). " +
+                          "Ensure the case was seeded via the benchmark pipeline.", caseCode);
                 return;
             }
+
+            log.info("Loaded case {} from database (dataset: {})", caseCode, dataset);
+            JsonNode groundTruth = MAPPER.readTree(gtJson);
+
+            List<BenchmarkDatabaseRepository.BenchmarkFileRecord> fileRecs = dbRepo.findCaseFiles(dataset, caseCode);
+            Map<String, byte[]> fileMap = new HashMap<>();
+            for (var fr : fileRecs) {
+                dbRepo.findBlobBytes(fr.blobSha256()).ifPresent(bytes -> fileMap.put(fr.fileName(), bytes));
+            }
+
+            runExtractionAndScoreInMemory(caseCode, groundTruth, fileMap, mock);
         } catch (Exception e) {
-            System.out.println("[NOTE] Could not load case from DB: " + e.getMessage() + ". Trying filesystem.");
-        }
-
-        // 2. Fallback to filesystem
-        Path casePath = dataDir.resolve(caseCode);
-        if (!Files.exists(casePath)) {
-            Path parentCandidate = Paths.get("..").resolve(dataDir).resolve(caseCode);
-            if (Files.exists(parentCandidate)) {
-                casePath = parentCandidate;
-            } else {
-                System.err.println("Error: Case not found in database or directory: " + casePath.toAbsolutePath());
-                return;
-            }
-        }
-
-        Path groundTruthPath = casePath.resolve("ground_truth.json");
-        if (!Files.exists(groundTruthPath)) {
-            System.err.println("Error: ground_truth.json not found in " + casePath.toAbsolutePath());
-            return;
-        }
-
-        try {
-            runExtractionAndScore(caseCode, casePath, groundTruthPath, mock);
-        } catch (Exception ex) {
-            System.err.println("Benchmark extraction execution failed: " + ex.getMessage());
-            ex.printStackTrace();
+            log.error("Benchmark extraction failed for case {}: {}", caseCode, e.getMessage(), e);
         }
     }
 
@@ -130,14 +108,13 @@ public final class CaseExtractionBenchmarkRunner {
             Map<String, byte[]> fileMap,
             boolean mock) throws Exception {
 
-        System.out.println("========================================================================================");
-        System.out.printf("DuesPilot Live Benchmark Extraction Evaluation (from Database): %s%n", caseCode);
-        System.out.println("========================================================================================");
+        log.info("================================================================");
+        log.info("DuesPilot Live Benchmark Extraction Evaluation: {}", caseCode);
+        log.info("================================================================");
 
         String apiKey = resolveApiKey();
         if ((apiKey == null || apiKey.isBlank()) && !mock) {
-            System.out.println("[NOTE] Live extraction requires NEBIUS_API_KEY or NVIDIA_API_KEY in environment or .env.");
-            System.out.println("No API key detected. Running in verification/fixture mode (--mock).");
+            log.info("[NOTE] Live extraction requires NEBIUS_API_KEY in environment or .env. Running in mock mode.");
             mock = true;
         }
 
@@ -156,7 +133,7 @@ public final class CaseExtractionBenchmarkRunner {
 
         JsonNode docsNode = groundTruth.get("documents");
         if (docsNode == null || !docsNode.isArray()) {
-            System.err.println("Error: No documents listed in ground truth");
+            log.error("No documents listed in ground truth for case {}", caseCode);
             return;
         }
 
@@ -170,15 +147,15 @@ public final class CaseExtractionBenchmarkRunner {
             byte[] fileBytes = fileMap.get(fileName);
 
             if (fileBytes == null) {
-                System.out.println("Skipping missing file in blob storage: " + fileName);
+                log.warn("Skipping missing file in blob storage: {}", fileName);
                 continue;
             }
 
             Map<Integer, String> pages = extractPages(fileBytes);
-            System.out.printf("%nDocument: %s (%s, %d pages)%n", fileName, docType.name(), pages.size());
+            log.info("Document: {} ({}, {} pages)", fileName, docType.name(), pages.size());
 
             var result = router.extractDocument(docType, fileName, pages, null, UUID.randomUUID());
-            System.out.printf("Model used: %s | Escalations: %s%n", result.finalModel(), result.escalationHistory());
+            log.info("Model used: {} | Escalations: {}", result.finalModel(), result.escalationHistory());
 
             Map<String, VerifiedField> extractedMap = new LinkedHashMap<>();
             for (VerifiedField vf : result.verifiedFields()) {
@@ -187,9 +164,9 @@ public final class CaseExtractionBenchmarkRunner {
 
             List<FieldCheck> checks = buildFieldChecks(docType, docNode, groundTruth);
 
-            System.out.println("------------------------------------------------------------------------------------------------");
-            System.out.printf("%-20s | %-25s | %-25s | %-12s | %-8s%n", "FIELD", "EXPECTED", "EXTRACTED", "STATUS", "MATCH");
-            System.out.println("------------------------------------------------------------------------------------------------");
+            log.info("------------------------------------------------------------------------------------------------");
+            log.info(String.format("%-20s | %-25s | %-25s | %-12s | %-8s", "FIELD", "EXPECTED", "EXTRACTED", "STATUS", "MATCH"));
+            log.info("------------------------------------------------------------------------------------------------");
 
             int docMatched = 0;
             for (FieldCheck check : checks) {
@@ -204,118 +181,21 @@ public final class CaseExtractionBenchmarkRunner {
                     totalMatched++;
                 }
 
-                System.out.printf("%-20s | %-25s | %-25s | %-12s | %-8s%n",
+                log.info(String.format("%-20s | %-25s | %-25s | %-12s | %-8s",
                     check.fieldName(),
                     truncate(check.expectedValue(), 25),
                     truncate(extractedVal, 25),
                     status,
                     isMatch ? "PASS" : "FAIL"
-                );
+                ));
             }
-            System.out.printf("Document Score: %d / %d fields matched%n", docMatched, checks.size());
+            log.info("Document Score: {} / {} fields matched", docMatched, checks.size());
         }
 
-        System.out.println("========================================================================================");
         double accuracy = totalEvaluated > 0 ? (totalMatched * 100.0 / totalEvaluated) : 0.0;
-        System.out.printf("OVERALL EXTRACTION ACCURACY for %s: %d / %d (%.1f%%)%n", caseCode, totalMatched, totalEvaluated, accuracy);
-        System.out.println("========================================================================================");
-    }
-
-    public static void runExtractionAndScore(String caseCode, Path casePath, Path groundTruthPath, boolean mock) throws Exception {
-        JsonNode groundTruth = MAPPER.readTree(groundTruthPath.toFile());
-        System.out.println("========================================================================================");
-        System.out.printf("DuesPilot Live Benchmark Extraction Evaluation: %s%n", caseCode);
-        System.out.printf("Case Path: %s%n", casePath.toAbsolutePath());
-        System.out.println("========================================================================================");
-
-        String apiKey = resolveApiKey();
-        if ((apiKey == null || apiKey.isBlank()) && !mock) {
-            System.out.println("[NOTE] Live extraction requires NEBIUS_API_KEY or NVIDIA_API_KEY in environment or .env.");
-            System.out.println("No API key detected. Running in verification/fixture mode (--mock).");
-            mock = true;
-        }
-
-        LlmClient llmClient;
-        LlmProperties properties = createProperties(apiKey);
-        JsonValidator jsonValidator = new JsonValidator();
-
-        if (mock) {
-            llmClient = createMockLlmClient(groundTruth);
-        } else {
-            llmClient = new RestClientLlmClient(properties, new NoopLlmCallRepository(), org.springframework.web.client.RestClient.builder());
-        }
-
-        ExtractionPolicy extractionPolicy = new ExtractionPolicy(llmClient, properties, new NoopLlmCallRepository(), jsonValidator);
-        ModelRouter router = new ModelRouter(extractionPolicy, null, null);
-
-        JsonNode docsNode = groundTruth.get("documents");
-        if (docsNode == null || !docsNode.isArray()) {
-            System.err.println("Error: No documents listed in ground truth");
-            return;
-        }
-
-        int totalEvaluated = 0;
-        int totalMatched = 0;
-
-        for (JsonNode docNode : docsNode) {
-            String fileName = docNode.path("file_name").asText();
-            String docTypeStr = docNode.path("doc_type").asText();
-            DocType docType = DocType.fromString(docTypeStr);
-            Path filePath = casePath.resolve(fileName);
-            if (!Files.exists(filePath)) {
-                filePath = casePath.resolve("documents").resolve(fileName);
-            }
-
-            if (!Files.exists(filePath)) {
-                System.out.println("Skipping missing file: " + fileName);
-                continue;
-            }
-
-            Map<Integer, String> pages = extractPages(Files.readAllBytes(filePath));
-            System.out.printf("%nDocument: %s (%s, %d pages)%n", fileName, docType.name(), pages.size());
-
-            var result = router.extractDocument(docType, fileName, pages, null, UUID.randomUUID());
-            System.out.printf("Model used: %s | Escalations: %s%n", result.finalModel(), result.escalationHistory());
-
-            Map<String, VerifiedField> extractedMap = new LinkedHashMap<>();
-            for (VerifiedField vf : result.verifiedFields()) {
-                extractedMap.put(vf.fieldName().toUpperCase(Locale.ROOT), vf);
-            }
-
-            List<FieldCheck> checks = buildFieldChecks(docType, docNode, groundTruth);
-
-            System.out.println("------------------------------------------------------------------------------------------------");
-            System.out.printf("%-20s | %-25s | %-25s | %-12s | %-8s%n", "FIELD", "EXPECTED", "EXTRACTED", "STATUS", "MATCH");
-            System.out.println("------------------------------------------------------------------------------------------------");
-
-            int docMatched = 0;
-            for (FieldCheck check : checks) {
-                totalEvaluated++;
-                VerifiedField extracted = findField(extractedMap, check.fieldName());
-                String extractedVal = extracted != null ? (extracted.valueText() != null ? extracted.valueText() : "") : "<MISSING>";
-                String status = extracted != null ? extracted.status().name() : "MISSING";
-
-                boolean isMatch = check.matches(extracted);
-                if (isMatch) {
-                    docMatched++;
-                    totalMatched++;
-                }
-
-                System.out.printf("%-20s | %-25s | %-25s | %-12s | %-8s%n",
-                    check.fieldName(),
-                    truncate(check.expectedValue(), 25),
-                    truncate(extractedVal, 25),
-                    status,
-                    isMatch ? "PASS" : "FAIL"
-                );
-            }
-            System.out.printf("Document Score: %d / %d fields matched%n", docMatched, checks.size());
-        }
-
-        System.out.println("========================================================================================");
-        double accuracy = totalEvaluated > 0 ? (totalMatched * 100.0 / totalEvaluated) : 0.0;
-        System.out.printf("OVERALL EXTRACTION ACCURACY for %s: %d / %d (%.1f%%)%n", caseCode, totalMatched, totalEvaluated, accuracy);
-        System.out.println("========================================================================================");
+        log.info("OVERALL EXTRACTION ACCURACY for {}: {} / {} ({} %)", caseCode, totalMatched, totalEvaluated,
+                 String.format("%.1f", accuracy));
+        log.info("================================================================");
     }
 
     private static VerifiedField findField(Map<String, VerifiedField> map, String name) {
@@ -390,9 +270,8 @@ public final class CaseExtractionBenchmarkRunner {
     }
 
     private static String resolveApiKey() {
+        // Only NEBIUS_API_KEY is supported — NVIDIA_API_KEY alias removed
         String key = System.getenv("NEBIUS_API_KEY");
-        if (key != null && !key.isBlank()) return key;
-        key = System.getenv("NVIDIA_API_KEY");
         if (key != null && !key.isBlank()) return key;
 
         for (Path envPath : List.of(Paths.get(".env"), Paths.get("..", ".env"), Paths.get("../..", ".env"))) {
@@ -404,9 +283,6 @@ public final class CaseExtractionBenchmarkRunner {
                         if (trimmed.startsWith("NEBIUS_API_KEY=")) {
                             return trimmed.substring("NEBIUS_API_KEY=".length()).trim();
                         }
-                        if (trimmed.startsWith("NVIDIA_API_KEY=")) {
-                            return trimmed.substring("NVIDIA_API_KEY=".length()).trim();
-                        }
                     }
                 } catch (Exception ignored) {}
             }
@@ -415,22 +291,19 @@ public final class CaseExtractionBenchmarkRunner {
     }
 
     private static LlmProperties createProperties(String apiKey) {
-        var nano = new LlmProperties.ModelConfig("nvidia/nemotron-nano-3-30b-a3b", 32768, 60, 240, 512, 2048);
-        var superM = new LlmProperties.ModelConfig("nvidia/nemotron-3-super-120b-a12b", 1048576, 300, 900, 1024, 4096);
-        var ultra = new LlmProperties.ModelConfig("nvidia/nemotron-3-ultra-550b-a55b", 1048576, 1000, 3000, 2048, 8192);
-
-        String baseUrl = (apiKey != null && apiKey.startsWith("nvapi-"))
-            ? "https://integrate.api.nvidia.com/v1"
-            : "https://api.tokenfactory.nebius.com/v1";
+        // Model IDs match Token Factory (api.tokenfactory.nebius.com/v1)
+        var nano = new LlmProperties.ModelConfig("nvidia/nemotron-nano-3-30b-a3b", 32768, 200000, 400000, 512, 2048);
+        var superM = new LlmProperties.ModelConfig("nvidia/nemotron-3-super-120b-a12b", 131072, 800000, 2400000, 1024, 4096);
+        var ultra = new LlmProperties.ModelConfig("nvidia/nemotron-3-ultra-550b-a55b", 131072, 3000000, 9000000, 2048, 8192);
 
         LlmProperties props = new LlmProperties();
         props.setApiKey(apiKey != null ? apiKey : "mock-key");
-        props.setBaseUrl(baseUrl);
+        props.setBaseUrl("https://api.tokenfactory.nebius.com/v1");
         props.getModels().put("extract", nano);
         props.getModels().put("reason", superM);
         props.getModels().put("adjudicate", ultra);
-        props.setDailyCostCapMicros(50000000L);
-        props.setPerCaseCostCapMicros(2000000L);
+        props.setDailyCostCapMicros(5000000L);
+        props.setPerCaseCostCapMicros(250000L);
         props.setMaxInflight(2);
         return props;
     }

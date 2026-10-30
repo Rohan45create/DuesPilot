@@ -16,10 +16,14 @@ jobs:
   ping-supabase:
     name: Ping Supabase Keep-Alive Table
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
     steps:
       - name: Validate Supabase secrets
         run: |
-          if [ -z "${{ secrets.SUPABASE_URL }}" ] || [ -z "${{ secrets.SUPABASE_ANON_KEY }}" ]; then
+          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_ANON_KEY" ]; then
             echo "::error::CRITICAL: Missing SUPABASE_URL or SUPABASE_ANON_KEY secret in GitHub repository settings!"
             echo "Supabase requires SUPABASE_URL and SUPABASE_ANON_KEY secrets to query the keep_alive table and prevent database pausing."
             exit 1
@@ -27,18 +31,16 @@ jobs:
 
       - name: Query keep_alive table via PostgREST
         run: |
-          URL="${{ secrets.SUPABASE_URL }}/rest/v1/keep_alive?select=*"
-          echo "Pinging Supabase keep_alive table at $URL..."
-          RESPONSE=$(curl -f -s \
+          URL="${SUPABASE_URL}/rest/v1/keep_alive?select=*"
+          HTTP_STATUS=$(curl -f -s -o /dev/null -w "%{http_code}" \
             -X GET "$URL" \
-            -H "apikey: ${{ secrets.SUPABASE_ANON_KEY }}" \
-            -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}" \
+            -H "apikey: $SUPABASE_ANON_KEY" \
+            -H "Authorization: Bearer $SUPABASE_ANON_KEY" \
             -H "Content-Type: application/json")
-          
-          echo "Response received: $RESPONSE"
-          if echo "$RESPONSE" | grep -q '"id"'; then
-            echo "Successfully verified Supabase PostgreSQL keep_alive table reachability."
+
+          if [ "$HTTP_STATUS" -ge 200 ] && [ "$HTTP_STATUS" -lt 300 ]; then
+            echo "Successfully pinged Supabase keep_alive table (HTTP $HTTP_STATUS)."
           else
-            echo "::error::Failed to reach Supabase keep_alive table. Response: $RESPONSE"
+            echo "::error::Failed to reach Supabase keep_alive table. HTTP status: $HTTP_STATUS"
             exit 1
           fi

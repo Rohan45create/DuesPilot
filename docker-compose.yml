@@ -3,13 +3,12 @@ services:
     image: postgres:16-alpine
     container_name: duespilot-postgres
     restart: unless-stopped
-    env_file: .env
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-duespilot}
       POSTGRES_USER: ${POSTGRES_USER:-duespilot}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-duespilot}
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -43,14 +42,9 @@ services:
       DAILY_COST_CAP_MICROS: ${DAILY_COST_CAP_MICROS:-5000000}
       PER_CASE_COST_CAP_MICROS: ${PER_CASE_COST_CAP_MICROS:-250000}
       LLM_MAX_INFLIGHT: ${LLM_MAX_INFLIGHT:-8}
-      STORAGE_DIR: /app/data/uploads
     ports:
       - "${SERVER_PORT:-8080}:8080"
-    volumes:
-      - app_uploads:/app/data/uploads
 
 volumes:
   postgres_data:
     name: duespilot_postgres_data
-  app_uploads:
-    name: duespilot_app_uploads

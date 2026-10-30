@@ -4,6 +4,9 @@ import com.duespilot.api.domain.LlmCallEntity;
 import com.duespilot.api.llm.error.CaseBudgetExceededException;
 import com.duespilot.api.llm.error.DailyBudgetExceededException;
 import com.duespilot.api.repository.LlmCallRepository;
+import jakarta.annotation.PostConstruct;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
@@ -29,6 +32,8 @@ import java.util.concurrent.TimeUnit;
 
 @Component
 public class RestClientLlmClient implements LlmClient {
+
+    private static final Logger log = LoggerFactory.getLogger(RestClientLlmClient.class);
 
     private final LlmProperties properties;
     private final LlmCallRepository llmCallRepository;
@@ -75,6 +80,46 @@ public class RestClientLlmClient implements LlmClient {
         }
 
         this.restClient = builder.build();
+    }
+
+    /**
+     * Startup verification: queries GET /models and logs a warning (not a failure)
+     * if any configured model ID is not available in the model provider registry (F15).
+     */
+    @PostConstruct
+    public void validateConfiguredModels() {
+        if (properties.getApiKey() == null || properties.getApiKey().isBlank() || "mock-key".equalsIgnoreCase(properties.getApiKey())) {
+            return;
+        }
+        try {
+            String response = restClient.get()
+                .uri("/models")
+                .retrieve()
+                .body(String.class);
+            if (response != null && !response.isBlank()) {
+                JsonNode root = objectMapper.readTree(response);
+                JsonNode data = root.path("data");
+                if (data.isArray()) {
+                    List<String> availableIds = new ArrayList<>();
+                    for (JsonNode node : data) {
+                        String id = node.path("id").asText();
+                        if (!id.isBlank()) {
+                            availableIds.add(id);
+                        }
+                    }
+                    for (var entry : properties.getModels().entrySet()) {
+                        String configuredId = entry.getValue().id();
+                        if (!availableIds.contains(configuredId)) {
+                            log.warn("[F15] Configured model ID '{}' (role: '{}') was not found in available models at {}/models",
+                                configuredId, entry.getKey(), properties.getBaseUrl());
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.warn("[F15] Could not verify configured model IDs against {}/models at startup: {}",
+                properties.getBaseUrl(), e.getMessage());
+        }
     }
 
     @Override

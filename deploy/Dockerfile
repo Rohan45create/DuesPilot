@@ -29,7 +29,6 @@ WORKDIR /app
 
 # Hardened security: run as unprivileged user (Rule R-53, R-55)
 RUN addgroup -S duespilot && adduser -S duespilot -G duespilot && \
-    mkdir -p /app/data/uploads /app/benchmark-data && \
     chown -R duespilot:duespilot /app
 
 USER duespilot
@@ -37,24 +36,23 @@ USER duespilot
 # Copy executable jar from backend-builder stage
 COPY --from=backend-builder --chown=duespilot:duespilot /app/backend/duespilot-api/target/duespilot-api-0.0.1-SNAPSHOT-exec.jar /app/app.jar
 
-
 # Default Environment Variables (overridable at deployment)
 ENV PORT=8080 \
     SERVER_PORT=8080 \
     DEMO_MODE=replay \
     NOTIFY_SANDBOX=true \
     RATE_LIMIT_RPM=60 \
-    STORAGE_DIR=/app/data/uploads \
     DAILY_COST_CAP_MICROS=5000000 \
     PER_CASE_COST_CAP_MICROS=250000 \
-    LLM_MAX_INFLIGHT=8
+    LLM_MAX_INFLIGHT=8 \
+    JAVA_OPTS=""
 
 EXPOSE 8080
 
-# Memory-conscious JVM flags:
-# - MaxRAMPercentage=75.0 (respects container cgroup limit e.g. 1Gi or 2Gi on Cloud Run / Render)
-# - ExitOnOutOfMemoryError (ensures immediate pod restart on OOM)
-# - Generational ZGC for low-latency virtual thread handling
-# - Honours $PORT injected by Cloud Run / Render via exec shell expansion
+# JVM flags tuned for 1 GiB containers (Cloud Run / Render):
+# - UseSerialGC: lowest overhead; avoids ZGC JDK version requirements on small heaps
+# - MaxRAMPercentage=70: respects cgroup limit and leaves headroom for non-heap
+# - ExitOnOutOfMemoryError: ensures immediate pod restart on OOM
 # - exec ensures java is PID 1 to receive SIGTERM for graceful shutdown
-ENTRYPOINT ["sh", "-c", "exec java -XX:MaxRAMPercentage=75.0 -XX:InitialRAMPercentage=50.0 -XX:+ExitOnOutOfMemoryError -XX:+UseZGC -XX:+ZGenerational -Dserver.port=${PORT:-8080} -Djava.security.egd=file:/dev/./urandom -jar /app/app.jar"]
+# Override JAVA_OPTS at deploy time to tune for larger container sizes.
+ENTRYPOINT ["sh", "-c", "exec java -XX:+UseSerialGC -XX:MaxRAMPercentage=70.0 -XX:+ExitOnOutOfMemoryError -Dserver.port=${PORT:-8080} -Djava.security.egd=file:/dev/./urandom $JAVA_OPTS -jar /app/app.jar"]
