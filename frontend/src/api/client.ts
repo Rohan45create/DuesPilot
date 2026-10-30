@@ -37,6 +37,15 @@ export const IS_MOCK_MODE = isMockModeActive(
   import.meta.env.VITE_MOCK_API
 );
 
+export const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/+$/, '');
+
+function resolveUrl(path: string): string {
+  if (path.startsWith('http://') || path.startsWith('https://')) {
+    return path;
+  }
+  return API_BASE_URL ? `${API_BASE_URL}${path.startsWith('/') ? path : `/${path}`}` : path;
+}
+
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -74,14 +83,15 @@ export async function fetchWithAuth(input: RequestInfo | URL, init: RequestInit 
     headers.set('Authorization', `Bearer ${token}`);
   }
 
-  let res = await fetch(input, { ...init, headers });
+  const targetUrl = typeof input === 'string' ? resolveUrl(input) : input;
+  let res = await fetch(targetUrl, { ...init, headers });
 
   if (res.status === 401) {
     try {
       const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
       if (!refreshError && refreshData.session?.access_token) {
         headers.set('Authorization', `Bearer ${refreshData.session.access_token}`);
-        res = await fetch(input, { ...init, headers });
+        res = await fetch(targetUrl, { ...init, headers });
       }
     } catch {
       // Refresh failed; return original 401
@@ -122,7 +132,8 @@ export async function createFetchEventSource(
     headers.set('Authorization', `Bearer ${token}`);
   }
 
-  let res = await fetch(url, {
+  const targetSseUrl = resolveUrl(url);
+  let res = await fetch(targetSseUrl, {
     method: options.method || 'GET',
     headers,
     body: options.body ? JSON.stringify(options.body) : undefined,
@@ -134,7 +145,7 @@ export async function createFetchEventSource(
       const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
       if (!refreshError && refreshData.session?.access_token) {
         headers.set('Authorization', `Bearer ${refreshData.session.access_token}`);
-        res = await fetch(url, {
+        res = await fetch(targetSseUrl, {
           method: options.method || 'GET',
           headers,
           body: options.body ? JSON.stringify(options.body) : undefined,
@@ -744,5 +755,6 @@ export const api = {
     return res.json();
   },
 };
+
 
 
